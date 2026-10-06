@@ -1,0 +1,283 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+enum TransactionType {
+  OPENING_BALANCE
+  IN
+  OUT
+  SETTLEMENT_RETURN
+  SETTLEMENT_ADJUSTMENT
+  CORRECTION
+}
+
+enum TransactionStatus {
+  ACTIVE
+  VOID
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum ChargeBasis {
+  TOTAL_RECEIVED
+  FINISHED_OUT
+  MANUAL_WEIGHT
+}
+
+enum SettlementAction {
+  RETURN_TO_CUSTOMER
+  ADJUST
+  CARRY_FORWARD
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(STAFF)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdTransactions Transaction[]       @relation("TransactionCreator")
+  voidedTransactions  Transaction[]       @relation("TransactionVoider")
+  createdSettlements  Settlement[]        @relation("SettlementCreator")
+  createdPayments     Payment[]           @relation("PaymentCreator")
+  auditLogs           AuditLog[]
+  resetTokens         PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Business {
+  id                String   @id @default(cuid())
+  name              String   @default("Penta Chool Works")
+  ownerName         String   @default("Kishorebhai Soni")
+  phone             String   @default("+91 98765 43210")
+  whatsapp          String   @default("+91 98765 43210")
+  email             String?
+  address           String   @default("Shop No. 12, Gold Market, Soni Bazaar, Rajkot, Gujarat")
+  gstNumber         String?
+  logoUrl           String?
+  defaultCurrency   String   @default("₹")
+  defaultWeightUnit String   @default("g")
+  decimalPrecision  Int      @default(3)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Karat {
+  id                String   @id @default(cuid())
+  name              String   @unique // e.g. "92K", "75K", "24K", "91.6", "58.5"
+  value             Decimal  @db.Decimal(5, 2) // e.g. 92.00, 75.00, 91.60
+  purityDescription String?  // e.g. "92% Gold (Chool grade)"
+  defaultMakingRate Decimal? @default(0.00) @db.Decimal(15, 2)
+  isPredefined      Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  displayOrder      Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  accounts     CustomerKaratAccount[]
+  transactions Transaction[]
+  settlements  Settlement[]
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  name        String
+  shopName    String?
+  phone       String
+  whatsapp    String?
+  address     String?
+  gstNumber   String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  accounts     CustomerKaratAccount[]
+  transactions Transaction[]
+  settlements  Settlement[]
+
+  @@index([name])
+  @@index([phone])
+  @@index([shopName])
+}
+
+model CustomerKaratAccount {
+  id             String   @id @default(cuid())
+  customerId     String
+  karatId        String
+  openingBalance Decimal  @default(0.000) @db.Decimal(15, 3)
+  cachedBalance  Decimal  @default(0.000) @db.Decimal(15, 3)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  karat        Karat         @relation(fields: [karatId], references: [id])
+  transactions Transaction[]
+
+  @@unique([customerId, karatId])
+  @@index([customerId])
+  @@index([karatId])
+}
+
+model Transaction {
+  id                String            @id @default(cuid())
+  transactionNumber String            @unique // e.g. TXN-10001
+  customerId        String
+  karatId           String
+  accountId         String
+  type              TransactionType
+  weight            Decimal           @db.Decimal(15, 3) // safe 0.001 precision
+  transactionDate   DateTime          @default(now())
+  description       String?
+  notes             String?
+  settlementId      String?
+  status            TransactionStatus @default(ACTIVE)
+  
+  // Override tracking
+  overrideAllowed   Boolean           @default(false)
+  overrideReason    String?
+
+  // Void audit
+  voidReason        String?
+  voidedAt          DateTime?
+  voidedById        String?
+
+  createdById       String
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  customer  Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  karat     Karat                 @relation(fields: [karatId], references: [id])
+  account   CustomerKaratAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  settlement Settlement?          @relation(fields: [settlementId], references: [id])
+  createdBy User                  @relation("TransactionCreator", fields: [createdById], references: [id])
+  voidedBy  User?                 @relation("TransactionVoider", fields: [voidedById], references: [id])
+
+  @@index([customerId, karatId])
+  @@index([transactionDate])
+  @@index([status])
+  @@index([type])
+}
+
+model Settlement {
+  id                     String           @id @default(cuid())
+  settlementNumber       String           @unique // e.g. SET-2026-0001
+  customerId             String
+  karatId                String
+  fromDate               DateTime
+  toDate                 DateTime
+  settlementDate         DateTime         @default(now())
+  
+  // Gold quantities
+  totalInWeight          Decimal          @db.Decimal(15, 3)
+  totalOutWeight         Decimal          @db.Decimal(15, 3)
+  remainingBefore        Decimal          @db.Decimal(15, 3)
+  settlementAction       SettlementAction @default(RETURN_TO_CUSTOMER)
+  settledWeight          Decimal          @default(0.000) @db.Decimal(15, 3)
+  carryForwardWeight     Decimal          @default(0.000) @db.Decimal(15, 3)
+  finalRemainingBalance  Decimal          @default(0.000) @db.Decimal(15, 3)
+
+  // Making charges
+  makingRate             Decimal          @default(0.00) @db.Decimal(15, 2)
+  chargeBasis            ChargeBasis      @default(TOTAL_RECEIVED)
+  chargeableWeight       Decimal          @default(0.000) @db.Decimal(15, 3)
+  calculatedMakingAmount Decimal          @default(0.00) @db.Decimal(15, 2)
+  discount               Decimal          @default(0.00) @db.Decimal(15, 2)
+  extraCharge            Decimal          @default(0.00) @db.Decimal(15, 2)
+  finalMakingAmount      Decimal          @default(0.00) @db.Decimal(15, 2)
+
+  // Payment tracking
+  paymentStatus          PaymentStatus    @default(UNPAID)
+  paidAmount             Decimal          @default(0.00) @db.Decimal(15, 2)
+  pendingAmount          Decimal          @default(0.00) @db.Decimal(15, 2)
+
+  notes                  String?
+  createdById            String
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  karat        Karat         @relation(fields: [karatId], references: [id])
+  createdBy    User          @relation("SettlementCreator", fields: [createdById], references: [id])
+  transactions Transaction[]
+  payments     Payment[]
+
+  @@index([customerId, karatId])
+  @@index([settlementDate])
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  settlementId  String
+  amount        Decimal  @db.Decimal(15, 2)
+  paymentDate   DateTime @default(now())
+  paymentMode   String   @default("CASH") // CASH, UPI, BANK_TRANSFER, CHEQUE
+  referenceNo   String?
+  notes         String?
+  createdById   String
+  createdAt     DateTime @default(now())
+
+  settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  createdBy  User       @relation("PaymentCreator", fields: [createdById], references: [id])
+
+  @@index([settlementId])
+  @@index([paymentDate])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  username   String?
+  action     String   // CREATE, UPDATE, VOID, SETTLE, LOGIN, SETTINGS_UPDATE
+  entity     String   // CUSTOMER, TRANSACTION, SETTLEMENT, KARAT, SETTINGS, USER
+  entityId   String?
+  oldValue   String?  @db.Text
+  newValue   String?  @db.Text
+  reason     String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+model AppSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String   @db.Text
+  description String?
+  updatedAt   DateTime @updatedAt
+}
