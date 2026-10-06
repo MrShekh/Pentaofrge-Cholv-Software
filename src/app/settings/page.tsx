@@ -12,10 +12,22 @@ import {
   CheckCircle2,
   AlertCircle,
   FileClock,
+  KeyRound,
+  Edit3,
+  Lock,
+  X,
 } from 'lucide-react';
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'business' | 'karats' | 'users' | 'audit'>('business');
+  const [activeTab, setActiveTab] = useState<'business' | 'profile' | 'karats' | 'users' | 'audit'>('business');
+
+  // Logged-in admin profile state
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [profileName, setProfileName] = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profileNewPassword, setProfileNewPassword] = useState('');
+  const [profileConfirmPassword, setProfileConfirmPassword] = useState('');
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
   // Business state
   const [business, setBusiness] = useState<any>({
@@ -45,6 +57,14 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState('STAFF');
 
+  // Edit user modal state
+  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editRole, setEditRole] = useState<'ADMIN' | 'STAFF'>('STAFF');
+  const [isSavingUserEdit, setIsSavingUserEdit] = useState(false);
+
   // Audit logs state
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
@@ -52,6 +72,19 @@ export default function SettingsPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const fetchCurrentUser = () => {
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.user) {
+          setCurrentUser(d.user);
+          setProfileName(d.user.name || '');
+          setProfileEmail(d.user.email || '');
+        }
+      })
+      .catch(console.error);
+  };
 
   const fetchBusiness = () => {
     fetch('/api/settings/business')
@@ -82,6 +115,7 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    fetchCurrentUser();
     fetchBusiness();
     fetchKarats();
     fetchUsers();
@@ -185,6 +219,99 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+
+    if (profileNewPassword) {
+      if (profileNewPassword.length < 6) {
+        setErrorMessage('Password must be at least 6 characters long');
+        return;
+      }
+      if (profileNewPassword !== profileConfirmPassword) {
+        setErrorMessage('Passwords do not match');
+        return;
+      }
+    }
+
+    if (!currentUser?.id) {
+      setErrorMessage('User session not loaded');
+      return;
+    }
+
+    setIsUpdatingProfile(true);
+    try {
+      const res = await fetch(`/api/settings/users/${currentUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: profileName,
+          email: profileEmail,
+          password: profileNewPassword || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update profile');
+
+      setProfileNewPassword('');
+      setProfileConfirmPassword('');
+      notify('Your profile and password updated successfully');
+      fetchCurrentUser();
+      fetchUsers();
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error updating profile');
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  const handleOpenEditUser = (user: any) => {
+    setEditingUser(user);
+    setEditName(user.name);
+    setEditEmail(user.email);
+    setEditPassword('');
+    setEditRole(user.role);
+    setErrorMessage(null);
+  };
+
+  const handleSaveEditedUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setErrorMessage(null);
+
+    if (editPassword && editPassword.length < 6) {
+      setErrorMessage('New password must be at least 6 characters long');
+      return;
+    }
+
+    setIsSavingUserEdit(true);
+    try {
+      const res = await fetch(`/api/settings/users/${editingUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editName,
+          email: editEmail,
+          role: editRole,
+          password: editPassword || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update user');
+
+      setEditingUser(null);
+      notify(`User ${editingUser.username} updated successfully`);
+      fetchUsers();
+      if (editingUser.id === currentUser?.id) {
+        fetchCurrentUser();
+      }
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error updating user');
+    } finally {
+      setIsSavingUserEdit(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -213,10 +340,10 @@ export default function SettingsPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200">
+      <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto">
         <button
           onClick={() => setActiveTab('business')}
-          className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition ${
+          className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition whitespace-nowrap ${
             activeTab === 'business'
               ? 'border-amber-600 text-amber-900'
               : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -226,25 +353,36 @@ export default function SettingsPage() {
         </button>
 
         <button
+          onClick={() => setActiveTab('profile')}
+          className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition whitespace-nowrap ${
+            activeTab === 'profile'
+              ? 'border-amber-600 text-amber-900'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <KeyRound className="w-4 h-4" /> My Profile &amp; Password
+        </button>
+
+        <button
           onClick={() => setActiveTab('karats')}
-          className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition ${
+          className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition whitespace-nowrap ${
             activeTab === 'karats'
               ? 'border-amber-600 text-amber-900'
               : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
-          <Layers className="w-4 h-4" /> Karat Grades (Ledger Separation)
+          <Layers className="w-4 h-4" /> Karat Grades
         </button>
 
         <button
           onClick={() => setActiveTab('users')}
-          className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition ${
+          className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition whitespace-nowrap ${
             activeTab === 'users'
               ? 'border-amber-600 text-amber-900'
               : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
-          <UsersIcon className="w-4 h-4" /> Staff & Access
+          <UsersIcon className="w-4 h-4" /> Staff &amp; Access
         </button>
 
         <button
@@ -252,7 +390,7 @@ export default function SettingsPage() {
             setActiveTab('audit');
             fetchAudit();
           }}
-          className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition ${
+          className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition whitespace-nowrap ${
             activeTab === 'audit'
               ? 'border-amber-600 text-amber-900'
               : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -271,7 +409,7 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                Business Name
+                Business / Workshop Name
               </label>
               <input
                 type="text"
@@ -291,8 +429,10 @@ export default function SettingsPage() {
                 required
                 value={business.ownerName || ''}
                 onChange={(e) => setBusiness({ ...business, ownerName: e.target.value })}
+                placeholder="e.g. Your Name (Proprietor)"
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm focus:bg-white"
               />
+              <span className="text-[11px] text-slate-400">Change Kishorebhai to your own name</span>
             </div>
 
             <div>
@@ -371,7 +511,119 @@ export default function SettingsPage() {
         </form>
       )}
 
-      {/* Tab 2: Karat Grades (Section 3) */}
+      {/* Tab 2: My Profile & Password */}
+      {activeTab === 'profile' && (
+        <form
+          onSubmit={handleSaveProfile}
+          className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-6 max-w-2xl"
+        >
+          <div className="border-b border-slate-100 pb-4">
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-amber-700" />
+              Admin Profile &amp; Password Settings
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Update your display name (e.g. change Kishorebhai to your own name) and set your private login password.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  disabled
+                  value={currentUser?.username || 'admin'}
+                  className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 text-sm font-mono cursor-not-allowed"
+                />
+                <span className="text-[11px] text-slate-400">Fixed login username</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Your Display Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  placeholder="e.g. Your Name (Admin)"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-bold"
+                />
+                <span className="text-[11px] text-slate-400">Replaces Kishorebhai on top header &amp; logs</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                Email Address *
+              </label>
+              <input
+                type="email"
+                required
+                value={profileEmail}
+                onChange={(e) => setProfileEmail(e.target.value)}
+                placeholder="admin@yourdomain.com"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+              />
+            </div>
+
+            <div className="pt-4 border-t border-slate-100">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 mb-3 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-amber-700" />
+                Change Password (Leave blank to keep current)
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    minLength={6}
+                    value={profileNewPassword}
+                    onChange={(e) => setProfileNewPassword(e.target.value)}
+                    placeholder="Min. 6 characters"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    Confirm New Password
+                  </label>
+                  <input
+                    type="password"
+                    minLength={6}
+                    value={profileConfirmPassword}
+                    onChange={(e) => setProfileConfirmPassword(e.target.value)}
+                    placeholder="Re-enter new password"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-2 flex justify-end">
+            <button
+              type="submit"
+              disabled={isUpdatingProfile}
+              className="px-6 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-2 disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              {isUpdatingProfile ? 'Saving...' : 'Save Profile & Password'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Tab 3: Karat Grades (Section 3) */}
       {activeTab === 'karats' && (
         <div className="space-y-4 max-w-4xl">
           <div className="flex items-center justify-between">
@@ -661,12 +913,21 @@ export default function SettingsPage() {
                       </span>
                     </td>
                     <td className="py-3 px-3 text-center">
-                      <button
-                        onClick={() => handleToggleUserActive(u)}
-                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-[10px] font-bold text-slate-700"
-                      >
-                        {u.isActive ? 'Deactivate' : 'Activate'}
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => handleOpenEditUser(u)}
+                          className="px-2 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 rounded text-[10px] font-bold flex items-center gap-1 transition"
+                          title="Edit user or reset password"
+                        >
+                          <Edit3 className="w-3 h-3" /> Edit / Password
+                        </button>
+                        <button
+                          onClick={() => handleToggleUserActive(u)}
+                          className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-[10px] font-bold text-slate-700 transition"
+                        >
+                          {u.isActive ? 'Deactivate' : 'Activate'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -737,6 +998,104 @@ export default function SettingsPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User & Reset Password Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                  <Edit3 className="w-4 h-4 text-amber-700" />
+                  Edit User &amp; Password
+                </h3>
+                <span className="text-[11px] font-mono text-slate-500">
+                  @{editingUser.username}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedUser} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Full Name / Display Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Email Address *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Role</label>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value as 'ADMIN' | 'STAFF')}
+                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:bg-white"
+                >
+                  <option value="STAFF">Staff (Operator)</option>
+                  <option value="ADMIN">Admin (Full Control)</option>
+                </select>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100">
+                <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-amber-700" />
+                  Reset Password (Leave blank to keep current)
+                </label>
+                <input
+                  type="password"
+                  minLength={6}
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  placeholder="Enter new password (min. 6 characters)"
+                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:bg-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingUserEdit}
+                  className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-xs disabled:opacity-50"
+                >
+                  {isSavingUserEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

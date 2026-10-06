@@ -31,19 +31,24 @@ export async function PUT(
 
     const updateData: {
       name?: string;
+      email?: string;
       role?: Role;
       isActive?: boolean;
       passwordHash?: string;
     } = {};
 
     if (body.name) updateData.name = body.name.trim();
+    if (body.email) updateData.email = body.email.trim().toLowerCase();
     if (body.role && (body.role === 'ADMIN' || body.role === 'STAFF')) {
       updateData.role = body.role as Role;
     }
     if (body.isActive !== undefined) {
       updateData.isActive = Boolean(body.isActive);
     }
-    if (body.password && body.password.length >= 6) {
+    if (body.password) {
+      if (body.password.length < 6) {
+        return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
+      }
       updateData.passwordHash = await bcrypt.hash(body.password, 10);
     }
 
