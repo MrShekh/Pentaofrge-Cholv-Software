@@ -265,7 +265,7 @@ function TransactionsContent() {
                 <th className="py-3 px-3">Karat</th>
                 <th className="py-3 px-3">Type</th>
                 <th className="py-3 px-4 text-right">Weight</th>
-                <th className="py-3 px-4">Notes / Remarks</th>
+                <th className="py-3 px-4">Order Name / Remark</th>
                 <th className="py-3 px-3">Created By</th>
                 <th className="py-3 px-3 text-center">Action</th>
               </tr>

@@ -35,6 +35,7 @@ interface SettlementItem {
   settledWeight: string;
   returnedGoldWeight?: string;
   dukanLossWeight?: string;
+  dollLossWeight?: string;
   carryForwardWeight: string;
   makingRate: string;
   chargeBasis: string;
@@ -88,21 +89,15 @@ function SettlementsContent() {
     remaining: number;
   } | null>(null);
 
-  // Simplified Workshop Settlement State:
-  // 1. 'GOLD' (Making charge deducted from Loss in gold, remaining returned to customer)
-  // 2. 'MONEY' (Customer pays making in ₹ cash/UPI, gold returned to customer)
-  const [settleMode, setSettleMode] = useState<'GOLD' | 'MONEY'>('GOLD');
-  const [makingGoldWeight, setMakingGoldWeight] = useState<string>('0.000');
-  const [returnGoldWeight, setReturnGoldWeight] = useState<string>('0.000');
-  const [dukanLossWeight, setDukanLossWeight] = useState<string>('0.000');
-  const [makingAmountMoney, setMakingAmountMoney] = useState<string>('');
-  const [paymentReceived, setPaymentReceived] = useState<string>('');
-  const [paymentMode, setPaymentMode] = useState<string>('CASH');
+  // Workshop Settlement State (Gold / Metal only)
+  const [makingGoldWeight, setMakingGoldWeight] = useState<string>('');
+  const [returnGoldWeight, setReturnGoldWeight] = useState<string>('');
+  const [dukanLossWeight, setDukanLossWeight] = useState<string>('');
+  const [dollLossWeight, setDollLossWeight] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
 
   // Making Rate Calculation State:
-  // Allows user to specify rate per 100g (e.g. .200 mg / 100g) or per gram on order weight
-  const [orderWeight, setOrderWeight] = useState<string>('0.000');
+  const [orderWeight, setOrderWeight] = useState<string>('');
   const [rateUnit, setRateUnit] = useState<'PER_100G' | 'PER_GRAM'>('PER_100G');
   const [makingRate, setMakingRate] = useState<string>('');
 
@@ -113,82 +108,50 @@ function SettlementsContent() {
   const recalculateMaking = (
     owStr: string,
     rateStr: string,
-    unit: 'PER_100G' | 'PER_GRAM',
-    mode: 'GOLD' | 'MONEY',
-    summary = accountSummary
+    unit: 'PER_100G' | 'PER_GRAM'
   ) => {
     const ow = parseFloat(owStr) || 0;
     const rate = parseFloat(rateStr) || 0;
-    const loss = summary?.remaining || 0;
 
-    if (mode === 'GOLD') {
-      let calcGold = 0;
-      if (unit === 'PER_100G') {
-        // e.g. 500g * 0.200 / 100 = 1.000g
-        calcGold = (ow * rate) / 100;
-      } else {
-        // e.g. 500g * 0.002 = 1.000g
-        calcGold = ow * rate;
-      }
-
-      if (rateStr !== '') {
-        const calcGoldStr = calcGold > 0 ? calcGold.toFixed(3) : '0.000';
-        setMakingGoldWeight(calcGoldStr);
-        const availableAfterMaking = Math.max(0, loss - calcGold);
-        const dl = parseFloat(dukanLossWeight) || 0;
-        setReturnGoldWeight(Math.max(0, availableAfterMaking - dl).toFixed(3));
-      }
+    let calcGold = 0;
+    if (unit === 'PER_100G') {
+      calcGold = (ow * rate) / 100;
     } else {
-      let calcMoney = 0;
-      if (unit === 'PER_100G') {
-        calcMoney = (ow * rate) / 100;
-      } else {
-        calcMoney = ow * rate;
-      }
+      calcGold = ow * rate;
+    }
 
-      if (rateStr !== '') {
-        const moneyStr = calcMoney > 0 ? calcMoney.toFixed(2) : '';
-        setMakingAmountMoney(moneyStr);
-        setPaymentReceived(moneyStr);
-      }
+    if (rateStr !== '') {
+      const calcGoldStr = calcGold > 0 ? calcGold.toFixed(3) : '';
+      setMakingGoldWeight(calcGoldStr);
     }
   };
 
+  // Notebook manual entry: Independent fields, no forced auto-calculations
   const handleReturnGoldChange = (val: string) => {
     setReturnGoldWeight(val);
-    const loss = accountSummary?.remaining || 0;
-    const making = parseFloat(makingGoldWeight) || 0;
-    const availableAfterMaking = Math.max(0, loss - making);
-    const ret = parseFloat(val) || 0;
-    // Auto-calculate remaining as Dukan loss if return is less than available
-    const lossRemain = Math.max(0, availableAfterMaking - ret);
-    setDukanLossWeight(lossRemain.toFixed(3));
   };
 
   const handleDukanLossChange = (val: string) => {
     setDukanLossWeight(val);
-    const loss = accountSummary?.remaining || 0;
-    const making = parseFloat(makingGoldWeight) || 0;
-    const availableAfterMaking = Math.max(0, loss - making);
-    const dl = parseFloat(val) || 0;
-    // Auto-calculate Return to Customer as (Available - Making - DukanLoss)
-    const ret = Math.max(0, availableAfterMaking - dl);
-    setReturnGoldWeight(ret.toFixed(3));
+  };
+
+  const handleDollLossChange = (val: string) => {
+    setDollLossWeight(val);
   };
 
   const handleOrderWeightChange = (val: string) => {
     setOrderWeight(val);
-    recalculateMaking(val, makingRate, rateUnit, settleMode);
+    recalculateMaking(val, makingRate, rateUnit);
   };
 
   const handleRateChange = (val: string) => {
     setMakingRate(val);
-    recalculateMaking(orderWeight, val, rateUnit, settleMode);
+    recalculateMaking(orderWeight, val, rateUnit);
   };
 
   const handleRateUnitChange = (unit: 'PER_100G' | 'PER_GRAM') => {
     setRateUnit(unit);
-    recalculateMaking(orderWeight, makingRate, unit, settleMode);
+    recalculateMaking(orderWeight, makingRate, unit);
   };
 
   const fetchSettlements = () => {
@@ -246,16 +209,11 @@ function SettlementsContent() {
               remaining: bal,
             };
             setAccountSummary(summaryObj);
-            setReturnGoldWeight(bal.toFixed(3));
-            setMakingGoldWeight('0.000');
-            setDukanLossWeight('0.000');
-
-            const defaultOW = totOut > 0 ? totOut.toFixed(3) : (totIn > 0 ? totIn.toFixed(3) : '0.000');
-            setOrderWeight(defaultOW);
-
-            if (makingRate) {
-              recalculateMaking(defaultOW, makingRate, rateUnit, settleMode, summaryObj);
-            }
+            setReturnGoldWeight('');
+            setMakingGoldWeight('');
+            setDukanLossWeight('');
+            setDollLossWeight('');
+            setOrderWeight('');
           }
         })
         .catch(console.error);
@@ -278,17 +236,19 @@ function SettlementsContent() {
       const ow = parseFloat(orderWeight) || 0;
       const r = parseFloat(makingRate) || 0;
       const dl = parseFloat(dukanLossWeight) || 0;
+      const doll = parseFloat(dollLossWeight) || 0;
 
       const rateParts: string[] = [];
       if (r > 0) {
         rateParts.push(
-          settleMode === 'GOLD'
-            ? `Making: ${parseFloat(makingGoldWeight || '0').toFixed(3)}g gold (${makingRate}${rateUnit === 'PER_100G' ? '/100g' : '/g'} on ${ow.toFixed(3)}g order)`
-            : `Making: ₹${parseFloat(makingAmountMoney || '0').toFixed(2)} (${makingRate}${rateUnit === 'PER_100G' ? '/100g' : '/g'} on ${ow.toFixed(3)}g order)`
+          `Making: ${parseFloat(makingGoldWeight || '0').toFixed(3)}g gold (${makingRate}${rateUnit === 'PER_100G' ? '/100g' : '/g'} on ${ow.toFixed(3)}g order)`
         );
       }
       if (dl > 0) {
         rateParts.push(`Dukan Loss: ${dl.toFixed(3)}g`);
+      }
+      if (doll > 0) {
+        rateParts.push(`Doll Loss: ${doll.toFixed(3)}g`);
       }
 
       const rateInfo = rateParts.join(' • ');
@@ -302,13 +262,14 @@ function SettlementsContent() {
         body: JSON.stringify({
           customerId: selectedCustomerId,
           karatId: selectedKaratId,
-          settleMode,
-          makingGoldWeight: settleMode === 'GOLD' ? parseFloat(makingGoldWeight || '0') : 0,
+          settleMode: 'GOLD',
+          makingGoldWeight: parseFloat(makingGoldWeight || '0'),
           returnGoldWeight: parseFloat(returnGoldWeight || '0'),
-          dukanLossWeight: settleMode === 'GOLD' ? dl : 0,
-          makingAmountMoney: settleMode === 'MONEY' ? parseFloat(makingAmountMoney || '0') : 0,
-          paymentReceived: settleMode === 'MONEY' ? parseFloat(paymentReceived || '0') : 0,
-          paymentMode,
+          dukanLossWeight: dl,
+          dollLossWeight: doll,
+          makingAmountMoney: 0,
+          paymentReceived: 0,
+          paymentMode: 'CASH',
           makingRate: r > 0 ? r : undefined,
           notes: finalNotes,
         }),
@@ -350,7 +311,16 @@ function SettlementsContent() {
         </div>
 
         <button
-          onClick={() => setShowNewModal(true)}
+          onClick={() => {
+            setMakingGoldWeight('');
+            setReturnGoldWeight('');
+            setDukanLossWeight('');
+            setDollLossWeight('');
+            setOrderWeight('');
+            setMakingRate('');
+            setNotes('');
+            setShowNewModal(true);
+          }}
           className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
         >
           <Plus className="w-4 h-4" />
@@ -386,6 +356,7 @@ function SettlementsContent() {
                 <th className="py-3 px-3 text-right">Finished OUT</th>
                 <th className="py-3 px-3 text-right">Gold Returned</th>
                 <th className="py-3 px-3 text-right">Dukan Loss</th>
+                <th className="py-3 px-3 text-right">Doll Loss</th>
                 <th className="py-3 px-3 text-right">Making Charge</th>
                 <th className="py-3 px-3">Status</th>
                 <th className="py-3 px-4 text-center">Receipt</th>
@@ -394,7 +365,7 @@ function SettlementsContent() {
             <tbody className="divide-y divide-slate-100 font-medium">
               {isLoading ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-slate-400">
+                  <td colSpan={12} className="py-12 text-center text-slate-400">
                     Loading settlement history...
                   </td>
                 </tr>
@@ -409,10 +380,11 @@ function SettlementsContent() {
                   const isSettledInGold =
                     parseFloat(s.finalMakingAmount) === 0 && parseFloat(s.chargeableWeight) > 0;
                   const dukanLossVal = parseFloat(s.dukanLossWeight || '0');
+                  const dollLossVal = parseFloat(s.dollLossWeight || '0');
                   const makingGoldVal = isSettledInGold ? parseFloat(s.chargeableWeight || '0') : 0;
                   const actualReturnedGold = s.returnedGoldWeight
                     ? s.returnedGoldWeight
-                    : Math.max(0, parseFloat(s.settledWeight) - makingGoldVal - dukanLossVal).toFixed(3);
+                    : Math.max(0, parseFloat(s.settledWeight) - makingGoldVal - dukanLossVal - dollLossVal).toFixed(3);
 
                   return (
                     <tr key={s.id} className="hover:bg-slate-50 transition">
@@ -458,6 +430,15 @@ function SettlementsContent() {
                         {dukanLossVal > 0 ? (
                           <span className="text-orange-700 bg-orange-50 px-2 py-0.5 rounded border border-orange-200 text-[11px]">
                             {s.dukanLossWeight}g
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 font-normal">-</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono font-bold">
+                        {dollLossVal > 0 ? (
+                          <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[11px]">
+                            {s.dollLossWeight}g
                           </span>
                         ) : (
                           <span className="text-slate-300 font-normal">-</span>
@@ -655,61 +636,8 @@ function SettlementsContent() {
                 </div>
               )}
 
-              {/* Settlement Method: Deduct from Gold OR Pay in Money */}
-              <div className="space-y-3 pt-1">
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-900">
-                  Settlement Method *
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSettleMode('GOLD');
-                      setRateUnit('PER_100G');
-                      recalculateMaking(orderWeight, makingRate, 'PER_100G', 'GOLD');
-                    }}
-                    className={`p-3 rounded-xl border text-left transition ${
-                      settleMode === 'GOLD'
-                        ? 'border-amber-600 bg-amber-50/80 text-amber-950 shadow-xs ring-1 ring-amber-600/30'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="font-bold text-xs flex items-center gap-1.5 text-amber-950">
-                      <span>🪙</span> Deduct from Gold (Default)
-                    </div>
-                    <div className="text-[11px] text-slate-500 mt-1">
-                      Making charge is deducted from loss in gold. Remaining gold returned to customer.
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSettleMode('MONEY');
-                      setRateUnit('PER_GRAM');
-                      const loss = accountSummary?.remaining || 0;
-                      setReturnGoldWeight(loss.toFixed(3));
-                      recalculateMaking(orderWeight, makingRate, 'PER_GRAM', 'MONEY');
-                    }}
-                    className={`p-3 rounded-xl border text-left transition ${
-                      settleMode === 'MONEY'
-                        ? 'border-emerald-600 bg-emerald-50/80 text-emerald-950 shadow-xs ring-1 ring-emerald-600/30'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="font-bold text-xs flex items-center gap-1.5 text-emerald-950">
-                      <span>💵</span> Pay in Money (Cash / UPI)
-                    </div>
-                    <div className="text-[11px] text-slate-500 mt-1">
-                      Gold returned to customer. Making charge paid in cash/online rupees.
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Mode A: Deduct from Gold */}
-              {settleMode === 'GOLD' ? (
-                <div className="p-4 bg-amber-50/50 border border-amber-200 rounded-2xl space-y-4">
+              {/* Gold Settlement Details */}
+              <div className="p-4 bg-amber-50/50 border border-amber-200 rounded-2xl space-y-4">
                   {/* Rate Calculation Header & Inputs */}
                   <div className="space-y-3 pb-3 border-b border-amber-200/80">
                     <div className="flex items-center justify-between">
@@ -718,39 +646,15 @@ function SettlementsContent() {
                           <Calculator className="w-3.5 h-3.5 text-amber-700" /> Calculate Making Charge by Rate
                         </h4>
                         <p className="text-[11px] text-slate-500">
-                          Enter rate per 100g (e.g. .200 mg / 100g) or per gram on the order weight
+                          Enter rate per 100g or per gram on the order weight
                         </p>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Order / Work Weight */}
+                      {/* Order Weight */}
                       <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-bold text-slate-700">Order / Work Weight</label>
-                          <div className="flex items-center gap-1">
-                            {accountSummary && accountSummary.totalOut > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => handleOrderWeightChange(accountSummary.totalOut.toFixed(3))}
-                                className="text-[10px] text-amber-800 font-bold bg-amber-100 hover:bg-amber-200 px-1.5 py-0.5 rounded transition"
-                                title="Use finished OUT weight"
-                              >
-                                OUT: {accountSummary.totalOut.toFixed(3)}g
-                              </button>
-                            )}
-                            {accountSummary && accountSummary.totalIn > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => handleOrderWeightChange(accountSummary.totalIn.toFixed(3))}
-                                className="text-[10px] text-slate-600 font-semibold bg-slate-100 hover:bg-slate-200 px-1.5 py-0.5 rounded transition"
-                                title="Use raw gold IN weight"
-                              >
-                                IN: {accountSummary.totalIn.toFixed(3)}g
-                              </button>
-                            )}
-                          </div>
-                        </div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Order Weight</label>
                         <div className="relative">
                           <input
                             type="number"
@@ -758,12 +662,10 @@ function SettlementsContent() {
                             min="0"
                             value={orderWeight}
                             onChange={(e) => handleOrderWeightChange(e.target.value)}
-                            placeholder="e.g. 500.000"
                             className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                           />
                           <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">g</span>
                         </div>
-                        <p className="text-[11px] text-slate-500 mt-1">Total order weight to calculate making on</p>
                       </div>
 
                       {/* Making Rate & Unit Toggle */}
@@ -803,18 +705,12 @@ function SettlementsContent() {
                             min="0"
                             value={makingRate}
                             onChange={(e) => handleRateChange(e.target.value)}
-                            placeholder={rateUnit === 'PER_100G' ? 'e.g. 0.200 (for 200mg / 100g)' : 'e.g. 0.002'}
                             className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                           />
                           <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">
                             {rateUnit === 'PER_100G' ? 'g / 100g' : 'g / g'}
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-500 mt-1">
-                          {rateUnit === 'PER_100G'
-                            ? 'e.g. 0.200 means 200mg cut per 100g order'
-                            : 'Cutting rate per single gram'}
-                        </p>
                       </div>
                     </div>
 
@@ -848,33 +744,23 @@ function SettlementsContent() {
                     )}
                   </div>
 
-                  {/* Gold Grams: Making, Return, and Dukan Loss */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Gold Grams: Making, Return, Dukan Loss, and Doll Loss (Manual Notebook entries) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Total Making Charge (Gold) *
+                        Making Charge (Gold) *
                       </label>
                       <div className="relative">
                         <input
                           type="number"
                           step="0.001"
                           min="0"
-                          max={accountSummary?.remaining || 9999}
                           value={makingGoldWeight}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setMakingGoldWeight(val);
-                            const loss = accountSummary?.remaining || 0;
-                            const mg = parseFloat(val) || 0;
-                            const dl = parseFloat(dukanLossWeight) || 0;
-                            setReturnGoldWeight(Math.max(0, loss - mg - dl).toFixed(3));
-                          }}
-                          placeholder="0.000"
+                          onChange={(e) => setMakingGoldWeight(e.target.value)}
                           className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                         />
                         <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">g</span>
                       </div>
-                      <p className="text-[10px] text-slate-500 mt-1">Kept as workshop fee</p>
                     </div>
 
                     <div>
@@ -886,15 +772,12 @@ function SettlementsContent() {
                           type="number"
                           step="0.001"
                           min="0"
-                          max={accountSummary?.remaining || 9999}
                           value={returnGoldWeight}
                           onChange={(e) => handleReturnGoldChange(e.target.value)}
-                          placeholder="0.000"
                           className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                         />
                         <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">g</span>
                       </div>
-                      <p className="text-[10px] text-slate-500 mt-1">Physically returned gold</p>
                     </div>
 
                     <div>
@@ -905,9 +788,9 @@ function SettlementsContent() {
                         {parseFloat(dukanLossWeight || '0') > 0 && (
                           <button
                             type="button"
-                            onClick={() => handleDukanLossChange('0.000')}
+                            onClick={() => handleDukanLossChange('')}
                             className="text-[10px] text-slate-400 hover:text-slate-600 font-semibold"
-                            title="Set Dukan Loss to 0"
+                            title="Clear Dukan Loss"
                           >
                             Clear
                           </button>
@@ -918,15 +801,41 @@ function SettlementsContent() {
                           type="number"
                           step="0.001"
                           min="0"
-                          max={accountSummary?.remaining || 9999}
                           value={dukanLossWeight}
                           onChange={(e) => handleDukanLossChange(e.target.value)}
-                          placeholder="0.000"
                           className="w-full px-3 py-2 bg-white border border-red-200 rounded-xl text-red-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20"
                         />
                         <span className="absolute right-3 top-2.5 text-xs text-red-400 font-bold">g</span>
                       </div>
-                      <p className="text-[10px] text-red-600 mt-1">Shop melting/refining loss</p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-bold text-rose-700 flex items-center gap-1">
+                          <span>✨</span> Doll Loss
+                        </label>
+                        {parseFloat(dollLossWeight || '0') > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleDollLossChange('')}
+                            className="text-[10px] text-slate-400 hover:text-slate-600 font-semibold"
+                            title="Clear Doll Loss"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="0.001"
+                          min="0"
+                          value={dollLossWeight}
+                          onChange={(e) => handleDollLossChange(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-rose-200 rounded-xl text-rose-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs text-rose-400 font-bold">g</span>
+                      </div>
                     </div>
                   </div>
 
@@ -935,7 +844,10 @@ function SettlementsContent() {
                       <span>Total: <strong className="font-mono">{accountSummary?.remaining.toFixed(3) || '0.000'}g</strong></span>
                       <span>{' − '}Making: <strong className="font-mono text-amber-800">{parseFloat(makingGoldWeight || '0').toFixed(3)}g</strong></span>
                       {parseFloat(dukanLossWeight || '0') > 0 && (
-                        <span>{' − '}Dukan Loss: <strong className="font-mono text-red-700">{parseFloat(dukanLossWeight || '0').toFixed(3)}g</strong></span>
+                        <span>{' − '}Dukan: <strong className="font-mono text-red-700">{parseFloat(dukanLossWeight || '0').toFixed(3)}g</strong></span>
+                      )}
+                      {parseFloat(dollLossWeight || '0') > 0 && (
+                        <span>{' − '}Doll: <strong className="font-mono text-rose-700">{parseFloat(dollLossWeight || '0').toFixed(3)}g</strong></span>
                       )}
                       <span>{' = '}Return: <strong className="font-mono text-emerald-700">{parseFloat(returnGoldWeight || '0').toFixed(3)}g</strong></span>
                     </div>
@@ -947,226 +859,13 @@ function SettlementsContent() {
                           (accountSummary?.remaining || 0) -
                             parseFloat(makingGoldWeight || '0') -
                             parseFloat(returnGoldWeight || '0') -
-                            parseFloat(dukanLossWeight || '0')
+                            parseFloat(dukanLossWeight || '0') -
+                            parseFloat(dollLossWeight || '0')
                         ).toFixed(3)}g
                       </strong>
                     </div>
                   </div>
                 </div>
-              ) : (
-                /* Mode B: Pay in Money */
-                <div className="p-4 bg-emerald-50/50 border border-emerald-200 rounded-2xl space-y-4">
-                  {/* Rate Calculation for Money */}
-                  <div className="space-y-3 pb-3 border-b border-emerald-200/80">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                          <Calculator className="w-3.5 h-3.5 text-emerald-700" /> Calculate Making Fee by Rate (₹)
-                        </h4>
-                        <p className="text-[11px] text-slate-500">
-                          Calculate rupee making fee based on order weight and rate
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Order Weight */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-bold text-slate-700">Order / Work Weight</label>
-                          <div className="flex items-center gap-1">
-                            {accountSummary && accountSummary.totalOut > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => handleOrderWeightChange(accountSummary.totalOut.toFixed(3))}
-                                className="text-[10px] text-emerald-800 font-bold bg-emerald-100 hover:bg-emerald-200 px-1.5 py-0.5 rounded transition"
-                              >
-                                OUT: {accountSummary.totalOut.toFixed(3)}g
-                              </button>
-                            )}
-                            {accountSummary && accountSummary.totalIn > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => handleOrderWeightChange(accountSummary.totalIn.toFixed(3))}
-                                className="text-[10px] text-slate-600 font-semibold bg-slate-100 hover:bg-slate-200 px-1.5 py-0.5 rounded transition"
-                              >
-                                IN: {accountSummary.totalIn.toFixed(3)}g
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            step="0.001"
-                            min="0"
-                            value={orderWeight}
-                            onChange={(e) => handleOrderWeightChange(e.target.value)}
-                            placeholder="e.g. 500.000"
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                          />
-                          <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">g</span>
-                        </div>
-                      </div>
-
-                      {/* Rupee Rate */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-bold text-slate-700">Making Rate (₹)</label>
-                          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                            <button
-                              type="button"
-                              onClick={() => handleRateUnitChange('PER_GRAM')}
-                              className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition ${
-                                rateUnit === 'PER_GRAM'
-                                  ? 'bg-emerald-600 text-white shadow-xs'
-                                  : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                            >
-                              ₹ / 1g
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleRateUnitChange('PER_100G')}
-                              className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition ${
-                                rateUnit === 'PER_100G'
-                                  ? 'bg-emerald-600 text-white shadow-xs'
-                                  : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                            >
-                              ₹ / 100g
-                            </button>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={makingRate}
-                            onChange={(e) => handleRateChange(e.target.value)}
-                            placeholder="e.g. 50"
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                          />
-                          <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">
-                            {rateUnit === 'PER_100G' ? '₹ / 100g' : '₹ / g'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Live Formula Badge for Rupee Mode */}
-                    {parseFloat(orderWeight) > 0 && parseFloat(makingRate) > 0 && (
-                      <div className="p-2.5 bg-emerald-100/70 border border-emerald-300 rounded-xl text-xs text-emerald-950 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                        <div className="font-semibold flex items-center gap-1.5 flex-wrap">
-                          <span className="text-emerald-800">🧮 Formula:</span>
-                          {rateUnit === 'PER_100G' ? (
-                            <span>
-                              {parseFloat(orderWeight).toFixed(3)}g (Order) × ₹{makingRate} ÷ 100 ={' '}
-                              <strong className="text-emerald-900 font-mono text-sm underline">
-                                ₹{parseFloat(makingAmountMoney || '0').toFixed(2)}
-                              </strong>
-                            </span>
-                          ) : (
-                            <span>
-                              {parseFloat(orderWeight).toFixed(3)}g (Order) × ₹{makingRate}/g ={' '}
-                              <strong className="text-emerald-900 font-mono text-sm underline">
-                                ₹{parseFloat(makingAmountMoney || '0').toFixed(2)}
-                              </strong>
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[10px] font-bold text-emerald-800 bg-white/90 px-2 py-0.5 rounded-full border border-emerald-200 w-fit">
-                          Auto-calculated
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Gold Returned to Customer (g) *
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          step="0.001"
-                          min="0"
-                          max={accountSummary?.remaining || 9999}
-                          value={returnGoldWeight}
-                          onChange={(e) => setReturnGoldWeight(e.target.value)}
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                        />
-                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">g</span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-1">Full loss gold handed back</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Making Charge (₹) *
-                      </label>
-                      <input
-                        type="number"
-                        step="1"
-                        min="0"
-                        value={makingAmountMoney}
-                        onChange={(e) => {
-                          setMakingAmountMoney(e.target.value);
-                          if (!paymentReceived || paymentReceived === makingAmountMoney) {
-                            setPaymentReceived(e.target.value);
-                          }
-                        }}
-                        placeholder="₹ Amount"
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                      />
-                      <p className="text-[11px] text-slate-500 mt-1">Making fee in rupees</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Payment Received (₹)
-                      </label>
-                      <input
-                        type="number"
-                        step="1"
-                        min="0"
-                        value={paymentReceived}
-                        onChange={(e) => setPaymentReceived(e.target.value)}
-                        placeholder="₹ Paid"
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                      />
-                      <p className="text-[11px] text-slate-500 mt-1">Amount received today</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Payment Mode</label>
-                      <select
-                        value={paymentMode}
-                        onChange={(e) => setPaymentMode(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
-                      >
-                        <option value="CASH">Cash</option>
-                        <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
-                        <option value="BANK_TRANSFER">Bank Transfer</option>
-                        <option value="CHEQUE">Cheque</option>
-                      </select>
-                    </div>
-
-                    <div className="flex items-center text-xs text-slate-600 bg-white p-3 rounded-xl border border-slate-200">
-                      <div>
-                        Pending Making Bill:{' '}
-                        <strong className="font-mono text-red-600">
-                          ₹{Math.max(0, (parseFloat(makingAmountMoney) || 0) - (parseFloat(paymentReceived) || 0)).toFixed(2)}
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Notes */}
               <div>
@@ -1175,7 +874,6 @@ function SettlementsContent() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Final settlement of Batch 1"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"

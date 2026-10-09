@@ -40,7 +40,15 @@ export function QuickTransactionModal({
   const [selectedKaratId, setSelectedKaratId] = useState<string>('');
   const [type, setType] = useState<TransactionType>(initialType);
   const [weight, setWeight] = useState<string>('');
-  const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const getLocalDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [date, setDate] = useState<string>(getLocalDate);
   const [time, setTime] = useState<string>(() => {
     const d = new Date();
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -63,6 +71,9 @@ export function QuickTransactionModal({
 
   useEffect(() => {
     if (isOpen) {
+      setDate(getLocalDate());
+      const now = new Date();
+      setTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
       fetch('/api/customers')
         .then((res) => res.json())
         .then((data) => {
@@ -306,7 +317,7 @@ export function QuickTransactionModal({
                 <option value="">-- Select Customer --</option>
                 {customers.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} {c.shopName ? `(${c.shopName})` : ''} - {c.phone}
+                    {c.name} - {c.phone}
                   </option>
                 ))}
               </select>
@@ -348,14 +359,13 @@ export function QuickTransactionModal({
             {/* Weight Input */}
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-                Weight in Grams * (min 0.001g)
+                Weight in Grams *
               </label>
               <div className="relative">
                 <input
                   type="number"
                   step="0.001"
                   min="0.001"
-                  placeholder="e.g. 50.000"
                   value={weight}
                   onChange={(e) => setWeight(e.target.value)}
                   required
@@ -393,17 +403,16 @@ export function QuickTransactionModal({
               </div>
             </div>
 
-            {/* Notes */}
+            {/* Order Name / Remark */}
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-                Description / Notes (Optional)
+                Order Name / Remark
               </label>
               <input
                 type="text"
-                placeholder="e.g. Bangles for star chool cut"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-medium"
               />
             </div>
 
@@ -525,7 +534,7 @@ export function QuickTransactionModal({
 
             {notes && (
               <div className="text-xs text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                <span className="font-semibold text-slate-600">Note:</span> {notes}
+                <span className="font-semibold text-slate-700">Order Name / Remark:</span> {notes}
               </div>
             )}
 

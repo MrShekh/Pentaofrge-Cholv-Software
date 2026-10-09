@@ -33,6 +33,8 @@ export async function GET(
 
     const dukanLossTxn = settlement.transactions.find((t) => t.notes?.includes('(Dukan loss)'));
     const dukanLossWeight = dukanLossTxn ? toDecimal(dukanLossTxn.weight).toFixed(3) : '0.000';
+    const dollLossTxn = settlement.transactions.find((t) => t.notes?.includes('(Doll loss)'));
+    const dollLossWeight = dollLossTxn ? toDecimal(dollLossTxn.weight).toFixed(3) : '0.000';
     const returnTxn = settlement.transactions.find((t) => t.type === 'SETTLEMENT_RETURN');
     const returnedGoldWeight = returnTxn
       ? toDecimal(returnTxn.weight).toFixed(3)
@@ -41,6 +43,7 @@ export async function GET(
           toDecimal(settlement.settledWeight)
             .minus(toDecimal(settlement.chargeableWeight))
             .minus(toDecimal(dukanLossWeight))
+            .minus(toDecimal(dollLossWeight))
             .toNumber()
         ).toFixed(3);
 
@@ -62,6 +65,7 @@ export async function GET(
         settledWeight: toDecimal(settlement.settledWeight).toFixed(3),
         returnedGoldWeight,
         dukanLossWeight,
+        dollLossWeight,
         carryForwardWeight: toDecimal(settlement.carryForwardWeight).toFixed(3),
         finalRemainingBalance: toDecimal(settlement.finalRemainingBalance).toFixed(3),
         makingRate: toDecimal(settlement.makingRate).toFixed(2),

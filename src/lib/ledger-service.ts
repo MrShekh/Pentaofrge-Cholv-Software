@@ -24,6 +24,99 @@ export interface LedgerSummary {
 }
 
 /**
+ * Generates the next guaranteed-unique transaction number (e.g. TXN-10043)
+ */
+export async function generateNextTransactionNumber(tx: Prisma.TransactionClient): Promise<string> {
+  const txs = await tx.transaction.findMany({
+    select: { transactionNumber: true },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
+
+  let maxNum = 10000;
+  for (const t of txs) {
+    const match = t.transactionNumber?.match(/TXN-(\d+)/);
+    if (match) {
+      const n = parseInt(match[1], 10);
+      if (!isNaN(n) && n > maxNum) {
+        maxNum = n;
+      }
+    }
+  }
+
+  let candidate = maxNum + 1;
+  while (await tx.transaction.findUnique({ where: { transactionNumber: `TXN-${candidate}` } })) {
+    candidate++;
+  }
+
+  return `TXN-${candidate}`;
+}
+
+/**
+ * Returns a generator function that produces guaranteed-unique sequential transaction numbers
+ */
+export async function getNextTransactionSequence(tx: Prisma.TransactionClient): Promise<() => Promise<string>> {
+  const txs = await tx.transaction.findMany({
+    select: { transactionNumber: true },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
+
+  let maxNum = 10000;
+  for (const t of txs) {
+    const match = t.transactionNumber?.match(/TXN-(\d+)/);
+    if (match) {
+      const n = parseInt(match[1], 10);
+      if (!isNaN(n) && n > maxNum) {
+        maxNum = n;
+      }
+    }
+  }
+
+  let current = maxNum;
+  return async () => {
+    current++;
+    while (await tx.transaction.findUnique({ where: { transactionNumber: `TXN-${current}` } })) {
+      current++;
+    }
+    return `TXN-${current}`;
+  };
+}
+
+/**
+ * Generates the next guaranteed-unique settlement number (e.g. SET-2026-0005)
+ */
+export async function generateNextSettlementNumber(tx: Prisma.TransactionClient): Promise<string> {
+  const year = new Date().getFullYear();
+  const settlements = await tx.settlement.findMany({
+    where: { settlementNumber: { startsWith: `SET-${year}-` } },
+    select: { settlementNumber: true },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
+
+  let maxNum = 0;
+  for (const s of settlements) {
+    const match = s.settlementNumber?.match(new RegExp(`SET-${year}-(\\d+)`));
+    if (match) {
+      const n = parseInt(match[1], 10);
+      if (!isNaN(n) && n > maxNum) {
+        maxNum = n;
+      }
+    }
+  }
+
+  let candidate = maxNum + 1;
+  let formatted = `SET-${year}-${String(candidate).padStart(4, '0')}`;
+  while (await tx.settlement.findUnique({ where: { settlementNumber: formatted } })) {
+    candidate++;
+    formatted = `SET-${year}-${String(candidate).padStart(4, '0')}`;
+  }
+
+  return formatted;
+}
+
+/**
  * Calculates current running balance for a given Customer + Karat account
  * derived directly from active transactions (the source of truth).
  */
@@ -42,6 +135,7 @@ export async function getAccountLedgerSummary(
         customerId,
         karatId,
         status: TransactionStatus.ACTIVE,
+        settlementId: null,
       },
       select: {
         type: true,
@@ -169,9 +263,8 @@ export async function createLedgerTransaction(input: CreateTransactionInput) {
       }
     }
 
-    // 4. Generate transaction number
-    const count = await tx.transaction.count();
-    const transactionNumber = `TXN-${10001 + count}`;
+    // 4. Generate guaranteed-unique transaction number
+    const transactionNumber = await generateNextTransactionNumber(tx);
 
     // 5. Create transaction
     const newTx = await tx.transaction.create({
@@ -229,7 +322,7 @@ export async function createLedgerTransaction(input: CreateTransactionInput) {
       previousBalance: summary.currentBalance,
       newBalance: updatedSummary.currentBalance,
     };
-  });
+  }, { timeout: 25000, maxWait: 15000 });
 }
 
 /**
@@ -310,6 +403,7 @@ export interface SettleAccountInput {
   makingGoldWeight?: number | string | Decimal;
   returnGoldWeight?: number | string | Decimal;
   dukanLossWeight?: number | string | Decimal;
+  dollLossWeight?: number | string | Decimal;
   
   // MONEY settlement: gold returned to customer, making paid in ₹
   makingAmountMoney?: number | string | Decimal;
@@ -320,6 +414,7 @@ export interface SettleAccountInput {
   // Legacy / fallback parameters
   settlementAction?: SettlementAction;
   settledWeight?: number | string | Decimal;
+  carryForwardWeight?: number | string | Decimal;
   makingRate?: number | string | Decimal;
   chargeBasis?: ChargeBasis;
   manualWeight?: number | string | Decimal;
@@ -349,12 +444,13 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
     const toDate = input.toDate || new Date();
     const fromDate = input.fromDate || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
 
-    // Active transactions up to toDate
+    // Active UNSETTLED transactions up to toDate
     const txns = await tx.transaction.findMany({
       where: {
         customerId: input.customerId,
         karatId: input.karatId,
         status: TransactionStatus.ACTIVE,
+        settlementId: null,
         transactionDate: {
           lte: toDate,
         },
@@ -363,7 +459,6 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
 
     let totalIn = new Decimal(0);
     let totalOut = new Decimal(0);
-    let previousSettlements = new Decimal(0);
 
     for (const t of txns) {
       const w = toDecimal(t.weight);
@@ -371,22 +466,18 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
         totalIn = totalIn.plus(w);
       } else if (t.type === TransactionType.OUT) {
         totalOut = totalOut.plus(w);
-      } else if (
-        t.type === TransactionType.SETTLEMENT_RETURN ||
-        t.type === TransactionType.SETTLEMENT_ADJUSTMENT
-      ) {
-        previousSettlements = previousSettlements.plus(w);
       }
     }
 
-    // Loss = remaining un-settled gold in workshop
-    const loss = totalIn.minus(totalOut).minus(previousSettlements);
+    // Loss = remaining un-settled gold in workshop for current order cycle
+    const loss = Decimal.max(0, totalIn.minus(totalOut));
     const isSimplifiedMode = input.settleMode === 'GOLD' || input.settleMode === 'MONEY' || input.makingGoldWeight !== undefined || input.makingAmountMoney !== undefined;
 
     let finalAction = input.settlementAction || SettlementAction.RETURN_TO_CUSTOMER;
     let settledGoldToReturn = new Decimal(0);
     let makingGoldDeducted = new Decimal(0);
     let dukanLossWeight = new Decimal(0);
+    let dollLossWeight = new Decimal(0);
     let carryForwardWeight = new Decimal(0);
     let finalRemainingBalance = new Decimal(0);
 
@@ -402,10 +493,7 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
       if (input.settleMode === 'MONEY') {
         // Option B: MONEY settlement
         settledGoldToReturn = input.returnGoldWeight !== undefined ? toDecimal(input.returnGoldWeight) : loss;
-        if (settledGoldToReturn.gt(loss)) {
-          throw new Error(`Gold to return (${settledGoldToReturn.toFixed(3)}g) cannot exceed available loss/balance (${loss.toFixed(3)}g).`);
-        }
-        carryForwardWeight = loss.minus(settledGoldToReturn);
+        carryForwardWeight = toDecimal(input.carryForwardWeight || 0);
         finalRemainingBalance = carryForwardWeight;
 
         finalMakingAmount = toDecimal(input.makingAmountMoney || 0);
@@ -424,25 +512,19 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
         }
       } else {
         // Option A: GOLD settlement (Default)
-        // Making charge and dukan loss are deducted from Loss in gold, and remaining returned to customer
+        // Notebook style manual entries: Making charge, Return gold, Dukan loss, and Doll loss are independent
         makingGoldDeducted = toDecimal(input.makingGoldWeight || 0);
         dukanLossWeight = toDecimal(input.dukanLossWeight || 0);
+        dollLossWeight = toDecimal(input.dollLossWeight || 0);
         settledGoldToReturn = input.returnGoldWeight !== undefined 
           ? toDecimal(input.returnGoldWeight) 
-          : loss.minus(makingGoldDeducted).minus(dukanLossWeight);
+          : Decimal.max(0, loss.minus(makingGoldDeducted).minus(dukanLossWeight).minus(dollLossWeight));
 
         if (settledGoldToReturn.lt(0)) {
           settledGoldToReturn = new Decimal(0);
         }
 
-        const totalDeductedFromLoss = makingGoldDeducted.plus(settledGoldToReturn).plus(dukanLossWeight);
-        if (totalDeductedFromLoss.gt(loss)) {
-          throw new Error(
-            `Total gold settled (${totalDeductedFromLoss.toFixed(3)}g: Making ${makingGoldDeducted.toFixed(3)}g + Return ${settledGoldToReturn.toFixed(3)}g + Dukan Loss ${dukanLossWeight.toFixed(3)}g) cannot exceed available loss/balance (${loss.toFixed(3)}g).`
-          );
-        }
-
-        carryForwardWeight = loss.minus(totalDeductedFromLoss);
+        carryForwardWeight = toDecimal(input.carryForwardWeight || 0);
         finalRemainingBalance = carryForwardWeight;
         chargeableWeight = makingGoldDeducted;
         finalMakingAmount = new Decimal(0);
@@ -453,18 +535,12 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
     } else {
       // Legacy / programmatic fallback
       const settledWeight = toDecimal(input.settledWeight || 0);
-      if (input.settlementAction !== SettlementAction.CARRY_FORWARD && settledWeight.gt(loss)) {
-        throw new Error(
-          `Settlement weight (${settledWeight.toFixed(3)}g) cannot exceed available remaining balance (${loss.toFixed(3)}g).`
-        );
-      }
-
       if (input.settlementAction === SettlementAction.CARRY_FORWARD) {
         carryForwardWeight = loss;
         finalRemainingBalance = loss;
       } else {
         settledGoldToReturn = settledWeight;
-        carryForwardWeight = loss.minus(settledWeight);
+        carryForwardWeight = toDecimal(input.carryForwardWeight || 0);
         finalRemainingBalance = carryForwardWeight;
       }
 
@@ -495,11 +571,10 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
       }
     }
 
-    // Generate settlement number
-    const count = await tx.settlement.count();
-    const settlementNumber = `SET-${new Date().getFullYear()}-${String(count + 1).padStart(4, '0')}`;
+    // Generate guaranteed-unique settlement number
+    const settlementNumber = await generateNextSettlementNumber(tx);
 
-    const totalSettledGold = settledGoldToReturn.plus(makingGoldDeducted).plus(dukanLossWeight);
+    const totalSettledGold = settledGoldToReturn.plus(makingGoldDeducted).plus(dukanLossWeight).plus(dollLossWeight);
 
     // Create Settlement Record
     const settlement = await tx.settlement.create({
@@ -532,16 +607,30 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
       },
     });
 
-    // Create ledger transactions:
-    const txnCount = await tx.transaction.count();
-    let currentTxnCount = txnCount;
+    // Link previous active unsettled transactions in this cycle to this settlement
+    await tx.transaction.updateMany({
+      where: {
+        customerId: input.customerId,
+        karatId: input.karatId,
+        status: TransactionStatus.ACTIVE,
+        settlementId: null,
+        transactionDate: {
+          lte: toDate,
+        },
+      },
+      data: {
+        settlementId: settlement.id,
+      },
+    });
+
+    // Create ledger transactions with collision-free sequence:
+    const getNextTxnNumber = await getNextTransactionSequence(tx);
 
     // 1. Gold returned to customer
     if (settledGoldToReturn.gt(0)) {
-      currentTxnCount++;
       await tx.transaction.create({
         data: {
-          transactionNumber: `TXN-${10000 + currentTxnCount}`,
+          transactionNumber: await getNextTxnNumber(),
           customerId: input.customerId,
           karatId: input.karatId,
           accountId: account.id,
@@ -558,10 +647,9 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
 
     // 2. Making charge deducted in gold (if applicable)
     if (makingGoldDeducted.gt(0)) {
-      currentTxnCount++;
       await tx.transaction.create({
         data: {
-          transactionNumber: `TXN-${10000 + currentTxnCount}`,
+          transactionNumber: await getNextTxnNumber(),
           customerId: input.customerId,
           karatId: input.karatId,
           accountId: account.id,
@@ -578,10 +666,9 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
 
     // 3. Dukan loss in gold (if applicable)
     if (dukanLossWeight.gt(0)) {
-      currentTxnCount++;
       await tx.transaction.create({
         data: {
-          transactionNumber: `TXN-${10000 + currentTxnCount}`,
+          transactionNumber: await getNextTxnNumber(),
           customerId: input.customerId,
           karatId: input.karatId,
           accountId: account.id,
@@ -590,6 +677,44 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
           transactionDate: new Date(),
           notes: `Settlement: ${settlementNumber} (Dukan loss)`,
           settlementId: settlement.id,
+          status: TransactionStatus.ACTIVE,
+          createdById: input.createdById,
+        },
+      });
+    }
+
+    // 4. Doll loss in gold (if applicable)
+    if (dollLossWeight.gt(0)) {
+      await tx.transaction.create({
+        data: {
+          transactionNumber: await getNextTxnNumber(),
+          customerId: input.customerId,
+          karatId: input.karatId,
+          accountId: account.id,
+          type: TransactionType.SETTLEMENT_ADJUSTMENT,
+          weight: new Prisma.Decimal(dollLossWeight.toFixed(3)),
+          transactionDate: new Date(),
+          notes: `Settlement: ${settlementNumber} (Doll loss)`,
+          settlementId: settlement.id,
+          status: TransactionStatus.ACTIVE,
+          createdById: input.createdById,
+        },
+      });
+    }
+
+    // 5. Carry forward balance opening for next cycle (if applicable)
+    if (carryForwardWeight.gt(0)) {
+      await tx.transaction.create({
+        data: {
+          transactionNumber: await getNextTxnNumber(),
+          customerId: input.customerId,
+          karatId: input.karatId,
+          accountId: account.id,
+          type: TransactionType.OPENING_BALANCE,
+          weight: new Prisma.Decimal(carryForwardWeight.toFixed(3)),
+          transactionDate: new Date(),
+          notes: `Opening balance carried forward from ${settlementNumber}`,
+          settlementId: null,
           status: TransactionStatus.ACTIVE,
           createdById: input.createdById,
         },
@@ -643,5 +768,5 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
       settlement,
       remainingBalance: updatedSummary.currentBalance,
     };
-  });
+  }, { timeout: 35000, maxWait: 15000 });
 }

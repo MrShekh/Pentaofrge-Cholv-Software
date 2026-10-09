@@ -4,6 +4,7 @@ import { requireUser } from '@/lib/auth';
 import { Decimal, toDecimal } from '@/lib/decimal';
 import { TransactionType, TransactionStatus, Prisma } from '@prisma/client';
 import { logAudit } from '@/lib/audit';
+import { generateNextTransactionNumber } from '@/lib/ledger-service';
 
 export async function GET(req: NextRequest) {
   try {
@@ -126,67 +127,85 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const customer = await prisma.$transaction(async (tx) => {
-      const newCustomer = await tx.customer.create({
+    let customer;
+
+    // Fast path: if no opening balances, create customer directly without interactive transaction
+    if (!Array.isArray(openingBalances) || openingBalances.length === 0) {
+      customer = await prisma.customer.create({
         data: {
           name: name.trim(),
-          shopName: shopName?.trim() || null,
           phone: phone.trim(),
+          shopName: shopName?.trim() || null,
           whatsapp: whatsapp?.trim() || phone.trim(),
           address: address?.trim() || null,
           gstNumber: gstNumber?.trim() || null,
           notes: notes?.trim() || null,
         },
       });
+    } else {
+      customer = await prisma.$transaction(
+        async (tx) => {
+          const newCustomer = await tx.customer.create({
+            data: {
+              name: name.trim(),
+              phone: phone.trim(),
+              shopName: shopName?.trim() || null,
+              whatsapp: whatsapp?.trim() || phone.trim(),
+              address: address?.trim() || null,
+              gstNumber: gstNumber?.trim() || null,
+              notes: notes?.trim() || null,
+            },
+          });
 
-      // Handle opening balances if provided
-      if (Array.isArray(openingBalances) && openingBalances.length > 0) {
-        for (const ob of openingBalances) {
-          const w = toDecimal(ob.weight);
-          if (w.gt(0)) {
-            const karat = await tx.karat.findUnique({ where: { id: ob.karatId } });
-            if (karat) {
-              const account = await tx.customerKaratAccount.create({
-                data: {
-                  customerId: newCustomer.id,
-                  karatId: karat.id,
-                  openingBalance: new Prisma.Decimal(w.toFixed(3)),
-                  cachedBalance: new Prisma.Decimal(w.toFixed(3)),
-                },
-              });
+          for (const ob of openingBalances) {
+            const w = toDecimal(ob.weight);
+            if (w.gt(0)) {
+              const karat = await tx.karat.findUnique({ where: { id: ob.karatId } });
+              if (karat) {
+                const account = await tx.customerKaratAccount.create({
+                  data: {
+                    customerId: newCustomer.id,
+                    karatId: karat.id,
+                    openingBalance: new Prisma.Decimal(w.toFixed(3)),
+                    cachedBalance: new Prisma.Decimal(w.toFixed(3)),
+                  },
+                });
 
-              const txCount = await tx.transaction.count();
-              await tx.transaction.create({
-                data: {
-                  transactionNumber: `TXN-${10001 + txCount}`,
-                  customerId: newCustomer.id,
-                  karatId: karat.id,
-                  accountId: account.id,
-                  type: TransactionType.OPENING_BALANCE,
-                  weight: new Prisma.Decimal(w.toFixed(3)),
-                  transactionDate: new Date(),
-                  notes: 'Opening balance recorded at customer registration',
-                  status: TransactionStatus.ACTIVE,
-                  createdById: user.userId,
-                },
-              });
+                const transactionNumber = await generateNextTransactionNumber(tx);
+                await tx.transaction.create({
+                  data: {
+                    transactionNumber,
+                    customerId: newCustomer.id,
+                    karatId: karat.id,
+                    accountId: account.id,
+                    type: TransactionType.OPENING_BALANCE,
+                    weight: new Prisma.Decimal(w.toFixed(3)),
+                    transactionDate: new Date(),
+                    notes: 'Opening balance recorded at customer registration',
+                    status: TransactionStatus.ACTIVE,
+                    createdById: user.userId,
+                  },
+                });
+              }
             }
           }
-        }
-      }
 
-      await logAudit({
-        userId: user.userId,
-        username: user.username,
-        action: 'CREATE',
-        entity: 'CUSTOMER',
-        entityId: newCustomer.id,
-        newValue: { name: newCustomer.name, phone: newCustomer.phone },
-        reason: 'Customer onboarded',
-      });
+          return newCustomer;
+        },
+        { timeout: 20000, maxWait: 10000 }
+      );
+    }
 
-      return newCustomer;
-    });
+    // Log audit outside the transaction
+    logAudit({
+      userId: user.userId,
+      username: user.username,
+      action: 'CREATE',
+      entity: 'CUSTOMER',
+      entityId: customer.id,
+      newValue: { name: customer.name, phone: customer.phone },
+      reason: 'Customer onboarded',
+    }).catch((err) => console.error('Customer audit log failed:', err));
 
     return NextResponse.json({ customer });
   } catch (error: unknown) {

@@ -140,9 +140,6 @@ export default function CustomerStatementPage({
               Customer Gold Statement
             </h3>
             <div className="text-sm font-bold text-slate-800 mt-1">{customerInfo?.name}</div>
-            {customerInfo?.shopName && (
-              <div className="text-xs text-slate-500">{customerInfo.shopName}</div>
-            )}
             <div className="text-xs text-slate-500">{customerInfo?.phone}</div>
           </div>
 
@@ -163,7 +160,7 @@ export default function CustomerStatementPage({
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-2.5 px-3">Date</th>
                 <th className="py-2.5 px-2">Type</th>
-                <th className="py-2.5 px-3">Description</th>
+                <th className="py-2.5 px-3">Order Name / Remark</th>
                 <th className="py-2.5 px-3 text-right">IN (g)</th>
                 <th className="py-2.5 px-3 text-right">OUT (g)</th>
                 <th className="py-2.5 px-3 text-right">Adjustment (g)</th>

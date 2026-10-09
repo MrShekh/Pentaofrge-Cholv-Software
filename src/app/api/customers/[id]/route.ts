@@ -31,11 +31,13 @@ export async function GET(
     // Compute exact balances per karat from active transactions
     const karatAccountsData = await Promise.all(
       customer.accounts.map(async (acc) => {
+        // Compute current active order metrics from unsettled transactions
         const txns = await prisma.transaction.findMany({
           where: {
             customerId: id,
             karatId: acc.karatId,
             status: TransactionStatus.ACTIVE,
+            settlementId: null,
           },
           select: {
             type: true,
@@ -47,7 +49,6 @@ export async function GET(
 
         let totalIn = new Decimal(0);
         let totalOut = new Decimal(0);
-        let totalAdjusted = new Decimal(0);
 
         for (const t of txns) {
           const w = toDecimal(t.weight);
@@ -55,15 +56,10 @@ export async function GET(
             totalIn = totalIn.plus(w);
           } else if (t.type === TransactionType.OUT) {
             totalOut = totalOut.plus(w);
-          } else if (
-            t.type === TransactionType.SETTLEMENT_RETURN ||
-            t.type === TransactionType.SETTLEMENT_ADJUSTMENT
-          ) {
-            totalAdjusted = totalAdjusted.plus(w);
           }
         }
 
-        const balance = totalIn.minus(totalOut).minus(totalAdjusted);
+        const balance = totalIn.minus(totalOut);
 
         return {
           accountId: acc.id,
@@ -73,7 +69,7 @@ export async function GET(
           defaultMakingRate: acc.karat.defaultMakingRate?.toString() || '0.00',
           totalIn: totalIn.toFixed(3),
           totalOut: totalOut.toFixed(3),
-          totalAdjusted: totalAdjusted.toFixed(3),
+          totalAdjusted: '0.000',
           balance: balance.toFixed(3),
           lastTransactionDate: txns[0]?.transactionDate || null,
           transactionCount: txns.length,
@@ -90,18 +86,53 @@ export async function GET(
       }
     }
 
-    // Settlements pending payment
+    // Settlements
     const settlements = await prisma.settlement.findMany({
       where: {
         customerId: id,
       },
       orderBy: { settlementDate: 'desc' },
+      include: {
+        karat: { select: { id: true, name: true } },
+        transactions: {
+          where: { status: 'ACTIVE' },
+          select: { id: true, type: true, weight: true, notes: true },
+        },
+      },
     });
 
     let overallOutstandingMaking = new Decimal(0);
-    for (const s of settlements) {
+    const formattedSettlements = settlements.map((s) => {
       overallOutstandingMaking = overallOutstandingMaking.plus(toDecimal(s.pendingAmount));
-    }
+
+      const dukanLossTxn = s.transactions.find((t) => t.notes?.includes('(Dukan loss)'));
+      const dukanLossWeight = dukanLossTxn ? toDecimal(dukanLossTxn.weight).toFixed(3) : '0.000';
+      const dollLossTxn = s.transactions.find((t) => t.notes?.includes('(Doll loss)'));
+      const dollLossWeight = dollLossTxn ? toDecimal(dollLossTxn.weight).toFixed(3) : '0.000';
+      const returnTxn = s.transactions.find((t) => t.type === 'SETTLEMENT_RETURN');
+      const returnedGoldWeight = returnTxn ? toDecimal(returnTxn.weight).toFixed(3) : '0.000';
+      const makingTxn = s.transactions.find((t) => t.notes?.includes('(Making charge deducted in gold)'));
+      const makingGoldWeight = makingTxn ? toDecimal(makingTxn.weight).toFixed(3) : '0.000';
+
+      return {
+        id: s.id,
+        settlementNumber: s.settlementNumber,
+        settlementDate: s.settlementDate,
+        karatName: s.karat.name,
+        karatId: s.karatId,
+        totalInWeight: toDecimal(s.totalInWeight).toFixed(3),
+        totalOutWeight: toDecimal(s.totalOutWeight).toFixed(3),
+        settledWeight: toDecimal(s.settledWeight).toFixed(3),
+        returnedGoldWeight,
+        makingGoldWeight,
+        dukanLossWeight,
+        dollLossWeight,
+        finalMakingAmount: toDecimal(s.finalMakingAmount).toFixed(2),
+        paidAmount: toDecimal(s.paidAmount).toFixed(2),
+        pendingAmount: toDecimal(s.pendingAmount).toFixed(2),
+        paymentStatus: s.paymentStatus,
+      };
+    });
 
     return NextResponse.json({
       customer: {
@@ -118,6 +149,7 @@ export async function GET(
         updatedAt: customer.updatedAt,
       },
       karatAccounts: karatAccountsData,
+      settlements: formattedSettlements,
       summary: {
         totalActiveKaratAccounts: karatAccountsData.length,
         totalPendingGold: overallPendingGold.toFixed(3),

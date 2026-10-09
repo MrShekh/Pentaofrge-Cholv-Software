@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/auth';
 import { Decimal, toDecimal } from '@/lib/decimal';
-import { TransactionType, TransactionStatus, Prisma } from '@prisma/client';
+import { TransactionType, TransactionStatus } from '@prisma/client';
 
 export async function GET(
   req: NextRequest,
@@ -17,7 +17,7 @@ export async function GET(
       prisma.karat.findUniqueOrThrow({ where: { id: karatId } }),
     ]);
 
-    // Fetch all transactions for this account in chronological order
+    // Fetch all transactions for this account
     const transactions = await prisma.transaction.findMany({
       where: {
         customerId,
@@ -39,13 +39,117 @@ export async function GET(
       },
     });
 
-    // Calculate bank-statement running balance
-    let runningBalance = new Decimal(0);
-    let totalIn = new Decimal(0);
-    let totalOut = new Decimal(0);
-    let totalAdjusted = new Decimal(0);
+    // Fetch past settlements for this customer + karat
+    const settlements = await prisma.settlement.findMany({
+      where: {
+        customerId,
+        karatId,
+      },
+      orderBy: { settlementDate: 'desc' },
+      include: {
+        transactions: {
+          where: { status: 'ACTIVE' },
+          select: { id: true, type: true, weight: true, notes: true },
+        },
+      },
+    });
 
-    const statementEntries = transactions.map((t) => {
+    const formattedSettlements = settlements.map((s) => {
+      const dukanLossTxn = s.transactions.find((t) => t.notes?.includes('(Dukan loss)'));
+      const dukanLossWeight = dukanLossTxn ? toDecimal(dukanLossTxn.weight).toFixed(3) : '0.000';
+      const dollLossTxn = s.transactions.find((t) => t.notes?.includes('(Doll loss)'));
+      const dollLossWeight = dollLossTxn ? toDecimal(dollLossTxn.weight).toFixed(3) : '0.000';
+      const returnTxn = s.transactions.find((t) => t.type === 'SETTLEMENT_RETURN');
+      const returnedGoldWeight = returnTxn ? toDecimal(returnTxn.weight).toFixed(3) : '0.000';
+      const makingTxn = s.transactions.find((t) => t.notes?.includes('(Making charge deducted in gold)'));
+      const makingGoldWeight = makingTxn ? toDecimal(makingTxn.weight).toFixed(3) : '0.000';
+
+      return {
+        id: s.id,
+        settlementNumber: s.settlementNumber,
+        settlementDate: s.settlementDate,
+        totalInWeight: toDecimal(s.totalInWeight).toFixed(3),
+        totalOutWeight: toDecimal(s.totalOutWeight).toFixed(3),
+        settledWeight: toDecimal(s.settledWeight).toFixed(3),
+        returnedGoldWeight,
+        makingGoldWeight,
+        dukanLossWeight,
+        dollLossWeight,
+        finalMakingAmount: toDecimal(s.finalMakingAmount).toFixed(2),
+        paymentStatus: s.paymentStatus,
+      };
+    });
+
+    // 1. Separate Active (unsettled) transactions from Settled transactions
+    let activeTotalIn = new Decimal(0);
+    let activeTotalOut = new Decimal(0);
+    let activeTotalAdjusted = new Decimal(0);
+    let activeRunningBal = new Decimal(0);
+
+    let lifetimeIn = new Decimal(0);
+    let lifetimeOut = new Decimal(0);
+
+    const activeEntries: Array<{
+      id: string;
+      transactionNumber: string;
+      date: Date;
+      type: TransactionType;
+      status: TransactionStatus;
+      weight: string;
+      inWeight: string | null;
+      outWeight: string | null;
+      adjWeight: string | null;
+      runningBalance: string | null;
+      notes: string | null;
+      description: string | null;
+      settlementId: string | null;
+      overrideAllowed: boolean;
+      overrideReason: string | null;
+      voidReason: string | null;
+      voidedAt: Date | null;
+      voidedBy: { id: string; name: string; username: string } | null;
+      createdBy: { id: string; name: string; username: string };
+      settlement: {
+        id: string;
+        settlementNumber: string;
+        settlementDate: Date;
+        finalMakingAmount: Decimal;
+        paymentStatus: string;
+      } | null;
+      isSettled: boolean;
+    }> = [];
+
+    const settledEntries: Array<{
+      id: string;
+      transactionNumber: string;
+      date: Date;
+      type: TransactionType;
+      status: TransactionStatus;
+      weight: string;
+      inWeight: string | null;
+      outWeight: string | null;
+      adjWeight: string | null;
+      runningBalance: string | null;
+      notes: string | null;
+      description: string | null;
+      settlementId: string | null;
+      overrideAllowed: boolean;
+      overrideReason: string | null;
+      voidReason: string | null;
+      voidedAt: Date | null;
+      voidedBy: { id: string; name: string; username: string } | null;
+      createdBy: { id: string; name: string; username: string };
+      settlement: {
+        id: string;
+        settlementNumber: string;
+        settlementDate: Date;
+        finalMakingAmount: Decimal;
+        paymentStatus: string;
+      } | null;
+      isSettled: boolean;
+    }> = [];
+
+    for (const t of transactions) {
       const w = toDecimal(t.weight);
       const isVoid = t.status === TransactionStatus.VOID;
 
@@ -56,23 +160,31 @@ export async function GET(
       if (!isVoid) {
         if (t.type === TransactionType.IN || t.type === TransactionType.OPENING_BALANCE) {
           inWeight = w.toFixed(3);
-          totalIn = totalIn.plus(w);
-          runningBalance = runningBalance.plus(w);
+          lifetimeIn = lifetimeIn.plus(w);
+          if (!t.settlementId) {
+            activeTotalIn = activeTotalIn.plus(w);
+            activeRunningBal = activeRunningBal.plus(w);
+          }
         } else if (t.type === TransactionType.OUT) {
           outWeight = w.toFixed(3);
-          totalOut = totalOut.plus(w);
-          runningBalance = runningBalance.minus(w);
+          lifetimeOut = lifetimeOut.plus(w);
+          if (!t.settlementId) {
+            activeTotalOut = activeTotalOut.plus(w);
+            activeRunningBal = activeRunningBal.minus(w);
+          }
         } else if (
           t.type === TransactionType.SETTLEMENT_RETURN ||
           t.type === TransactionType.SETTLEMENT_ADJUSTMENT
         ) {
           adjWeight = w.toFixed(3);
-          totalAdjusted = totalAdjusted.plus(w);
-          runningBalance = runningBalance.minus(w);
+          if (!t.settlementId) {
+            activeTotalAdjusted = activeTotalAdjusted.plus(w);
+            activeRunningBal = activeRunningBal.minus(w);
+          }
         }
       }
 
-      return {
+      const formattedEntry = {
         id: t.id,
         transactionNumber: t.transactionNumber,
         date: t.transactionDate,
@@ -82,9 +194,14 @@ export async function GET(
         inWeight,
         outWeight,
         adjWeight,
-        runningBalance: isVoid ? null : runningBalance.toFixed(3),
+        runningBalance: isVoid
+          ? null
+          : !t.settlementId
+          ? activeRunningBal.toFixed(3)
+          : null,
         notes: t.notes,
         description: t.description,
+        settlementId: t.settlementId,
         overrideAllowed: t.overrideAllowed,
         overrideReason: t.overrideReason,
         voidReason: t.voidReason,
@@ -92,8 +209,23 @@ export async function GET(
         voidedBy: t.voidedBy,
         createdBy: t.createdBy,
         settlement: t.settlement,
+        isSettled: !!t.settlementId,
       };
-    });
+
+      if (!t.settlementId) {
+        activeEntries.push(formattedEntry);
+      } else {
+        settledEntries.push(formattedEntry);
+      }
+    }
+
+    const currentBalance = activeTotalIn.minus(activeTotalOut).minus(activeTotalAdjusted);
+
+    // Active latest first
+    const activeReversed = [...activeEntries].reverse();
+    const settledReversed = [...settledEntries].reverse();
+    // Combined list: active on top, then settled history
+    const allReversed = [...activeReversed, ...settledReversed];
 
     return NextResponse.json({
       customer: {
@@ -110,13 +242,20 @@ export async function GET(
         defaultMakingRate: karat.defaultMakingRate?.toString() || '0.00',
       },
       summary: {
-        totalIn: totalIn.toFixed(3),
-        totalOut: totalOut.toFixed(3),
-        totalAdjusted: totalAdjusted.toFixed(3),
-        currentBalance: runningBalance.toFixed(3),
+        totalIn: activeTotalIn.toFixed(3),
+        totalOut: activeTotalOut.toFixed(3),
+        totalAdjusted: activeTotalAdjusted.toFixed(3),
+        currentBalance: currentBalance.toFixed(3),
+        lifetimeIn: lifetimeIn.toFixed(3),
+        lifetimeOut: lifetimeOut.toFixed(3),
         totalTransactions: transactions.length,
+        activeCount: activeEntries.length,
+        settledCount: settledEntries.length,
       },
-      ledger: statementEntries.reverse(), // latest on top for UI, but running balances computed chronologically
+      activeLedger: activeReversed,
+      settledLedger: settledReversed,
+      settlements: formattedSettlements,
+      ledger: allReversed,
     });
   } catch (error) {
     console.error('Error fetching ledger:', error);

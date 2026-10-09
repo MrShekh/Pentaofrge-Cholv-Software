@@ -261,7 +261,7 @@ export default function ReportsPage() {
                   <th className="py-2.5 px-3 text-right">IN (g)</th>
                   <th className="py-2.5 px-3 text-right">OUT (g)</th>
                   <th className="py-2.5 px-3 text-right">Settlement (g)</th>
-                  <th className="py-2.5 px-3">Notes</th>
+                  <th className="py-2.5 px-3">Order Name / Remark</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">

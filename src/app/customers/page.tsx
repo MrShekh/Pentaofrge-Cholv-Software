@@ -119,7 +119,7 @@ function CustomersContent() {
         <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
         <input
           type="text"
-          placeholder="Search customer, shop, or phone..."
+          placeholder="Search customer name or phone..."
           value={searchTerm}
           onChange={handleSearchChange}
           className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400 transition"
@@ -155,9 +155,6 @@ function CustomersContent() {
                       >
                         {c.name}
                       </Link>
-                      {c.shopName && (
-                        <div className="text-xs text-slate-400 font-normal">{c.shopName}</div>
-                      )}
                     </div>
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium ${

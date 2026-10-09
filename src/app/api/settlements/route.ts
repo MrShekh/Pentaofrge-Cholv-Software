@@ -39,6 +39,8 @@ export async function GET(req: NextRequest) {
       settlements: settlements.map((s) => {
         const dukanLossTxn = s.transactions.find((t) => t.notes?.includes('(Dukan loss)'));
         const dukanLossWeight = dukanLossTxn ? toDecimal(dukanLossTxn.weight).toFixed(3) : '0.000';
+        const dollLossTxn = s.transactions.find((t) => t.notes?.includes('(Doll loss)'));
+        const dollLossWeight = dollLossTxn ? toDecimal(dollLossTxn.weight).toFixed(3) : '0.000';
         const returnTxn = s.transactions.find((t) => t.type === 'SETTLEMENT_RETURN');
         const returnedGoldWeight = returnTxn
           ? toDecimal(returnTxn.weight).toFixed(3)
@@ -47,6 +49,7 @@ export async function GET(req: NextRequest) {
               toDecimal(s.settledWeight)
                 .minus(toDecimal(s.chargeableWeight))
                 .minus(toDecimal(dukanLossWeight))
+                .minus(toDecimal(dollLossWeight))
                 .toNumber()
             ).toFixed(3);
 
@@ -68,6 +71,7 @@ export async function GET(req: NextRequest) {
           settledWeight: toDecimal(s.settledWeight).toFixed(3),
           returnedGoldWeight,
           dukanLossWeight,
+          dollLossWeight,
           carryForwardWeight: toDecimal(s.carryForwardWeight).toFixed(3),
           makingRate: toDecimal(s.makingRate).toFixed(2),
           chargeBasis: s.chargeBasis,
@@ -106,6 +110,7 @@ export async function POST(req: NextRequest) {
       makingGoldWeight,
       returnGoldWeight,
       dukanLossWeight,
+      dollLossWeight,
       makingAmountMoney,
       paymentReceived,
       paymentMode,
@@ -114,6 +119,7 @@ export async function POST(req: NextRequest) {
       toDate,
       settlementAction,
       settledWeight,
+      carryForwardWeight,
       makingRate,
       chargeBasis,
       manualWeight,
@@ -136,6 +142,8 @@ export async function POST(req: NextRequest) {
       makingGoldWeight: makingGoldWeight !== undefined ? parseFloat(makingGoldWeight || '0') : undefined,
       returnGoldWeight: returnGoldWeight !== undefined ? parseFloat(returnGoldWeight || '0') : undefined,
       dukanLossWeight: dukanLossWeight !== undefined ? parseFloat(dukanLossWeight || '0') : 0,
+      dollLossWeight: dollLossWeight !== undefined ? parseFloat(dollLossWeight || '0') : 0,
+      carryForwardWeight: carryForwardWeight !== undefined ? parseFloat(carryForwardWeight || '0') : 0,
       makingAmountMoney: makingAmountMoney !== undefined ? parseFloat(makingAmountMoney || '0') : undefined,
       paymentReceived: paymentReceived !== undefined ? parseFloat(paymentReceived || '0') : undefined,
       paymentMode: paymentMode || 'CASH',

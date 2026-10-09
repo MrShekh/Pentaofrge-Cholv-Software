@@ -26,6 +26,8 @@ interface DashboardData {
     todayMakingGold?: string;
     todayDukanLoss?: string;
     totalDukanLoss?: string;
+    todayDollLoss?: string;
+    totalDollLoss?: string;
   };
   recentTransactions: Array<{
     id: string;
@@ -185,23 +187,35 @@ export default function DashboardPage() {
           <p className="text-[11px] text-slate-400 mt-1">Delivered &amp; settled return</p>
         </div>
 
-        {/* Dukan Loss Card */}
+        {/* Dukan & Doll Loss Card */}
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 mb-1.5">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Dukan Loss
+              Dukan &amp; Doll Loss
             </span>
             <Flame className="w-4 h-4 text-orange-500" />
           </div>
-          <div className="text-2xl font-bold text-slate-900 font-mono tracking-tight">
-            {isLoading ? '...' : `${data?.metrics.todayDukanLoss || '0.000'} g`}
+          <div className="text-xl font-bold text-slate-900 font-mono tracking-tight flex items-baseline gap-2">
+            {isLoading ? (
+              '...'
+            ) : (
+              <>
+                <span title="Dukan Loss">
+                  <span className="text-xs font-sans text-orange-700 font-bold mr-1">Dk:</span>
+                  {data?.metrics.todayDukanLoss || '0.000'}g
+                </span>
+                <span className="text-slate-300">|</span>
+                <span title="Doll Loss">
+                  <span className="text-xs font-sans text-rose-700 font-bold mr-1">Dl:</span>
+                  {data?.metrics.todayDollLoss || '0.000'}g
+                </span>
+              </>
+            )}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            {parseFloat(data?.metrics.todayDukanLoss || '0') > 0
-              ? 'Shop loss settled today'
-              : parseFloat(data?.metrics.totalDukanLoss || '0') > 0
-              ? `Total: ${data?.metrics.totalDukanLoss} g recorded`
-              : 'Melting & wastage loss'}
+          <p className="text-[10px] text-slate-400 mt-1">
+            {parseFloat(data?.metrics.totalDukanLoss || '0') > 0 || parseFloat(data?.metrics.totalDollLoss || '0') > 0
+              ? `Total: Dk ${data?.metrics.totalDukanLoss || '0'}g • Dl ${data?.metrics.totalDollLoss || '0'}g`
+              : 'Melting & tumbling workshop loss'}
           </p>
         </div>
 
@@ -349,6 +363,7 @@ export default function DashboardPage() {
                     const isIn = tx.type === 'IN' || tx.type === 'OPENING_BALANCE';
                     const isOut = tx.type === 'OUT' || tx.type === 'SETTLEMENT_RETURN';
                     const isDukanLoss = tx.notes?.includes('(Dukan loss)');
+                    const isDollLoss = tx.notes?.includes('(Doll loss)');
                     const isMakingGold = tx.notes?.includes('(Making charge');
                     const timeStr = new Date(tx.date).toLocaleTimeString('en-IN', {
                       hour: '2-digit',
@@ -357,6 +372,8 @@ export default function DashboardPage() {
 
                     const typeLabel = isDukanLoss
                       ? 'DUKAN LOSS'
+                      : isDollLoss
+                      ? 'DOLL LOSS'
                       : isMakingGold
                       ? 'MAKING (GOLD)'
                       : tx.type === 'SETTLEMENT_RETURN'
@@ -386,6 +403,8 @@ export default function DashboardPage() {
                                 ? 'bg-slate-100 text-emerald-800 border border-slate-200'
                                 : isDukanLoss
                                 ? 'bg-orange-50 text-orange-800 border border-orange-200 font-semibold'
+                                : isDollLoss
+                                ? 'bg-rose-50 text-rose-800 border border-rose-200 font-semibold'
                                 : isMakingGold
                                 ? 'bg-amber-50 text-amber-800 border border-amber-200'
                                 : isOut

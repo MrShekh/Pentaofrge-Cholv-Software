@@ -30,6 +30,7 @@ export async function GET() {
     let todayIn = new Decimal(0);
     let todayOut = new Decimal(0);
     let todayDukanLoss = new Decimal(0);
+    let todayDollLoss = new Decimal(0);
 
     for (const t of todayTxns) {
       const w = toDecimal(t.weight);
@@ -39,6 +40,8 @@ export async function GET() {
         todayOut = todayOut.plus(w);
       } else if (t.type === TransactionType.SETTLEMENT_ADJUSTMENT && t.notes?.includes('(Dukan loss)')) {
         todayDukanLoss = todayDukanLoss.plus(w);
+      } else if (t.type === TransactionType.SETTLEMENT_ADJUSTMENT && t.notes?.includes('(Doll loss)')) {
+        todayDollLoss = todayDollLoss.plus(w);
       }
     }
 
@@ -54,6 +57,19 @@ export async function GET() {
       },
     });
     const totalDukanLoss = toDecimal(totalDukanLossAgg._sum.weight || 0);
+
+    // All-time Doll loss
+    const totalDollLossAgg = await prisma.transaction.aggregate({
+      where: {
+        status: TransactionStatus.ACTIVE,
+        type: TransactionType.SETTLEMENT_ADJUSTMENT,
+        notes: { contains: '(Doll loss)' },
+      },
+      _sum: {
+        weight: true,
+      },
+    });
+    const totalDollLoss = toDecimal(totalDollLossAgg._sum.weight || 0);
 
     // 2. Total pending work across all customer karat accounts
     const allAccounts = await prisma.customerKaratAccount.findMany({
@@ -149,6 +165,8 @@ export async function GET() {
         todayMakingGold: todayMakingGold.toFixed(3),
         todayDukanLoss: todayDukanLoss.toFixed(3),
         totalDukanLoss: totalDukanLoss.toFixed(3),
+        todayDollLoss: todayDollLoss.toFixed(3),
+        totalDollLoss: totalDollLoss.toFixed(3),
       },
       recentTransactions: recentTxns.map((t) => ({
         id: t.id,

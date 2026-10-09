@@ -16,6 +16,7 @@ import {
   Edit3,
   Lock,
   X,
+  Trash2,
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -171,6 +172,30 @@ export default function SettingsPage() {
       fetchKarats();
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Error creating karat');
+    }
+  };
+
+  const [deletingKaratId, setDeletingKaratId] = useState<string | null>(null);
+
+  const handleDeleteKarat = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete ${name}? This cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingKaratId(id);
+    setErrorMessage(null);
+    try {
+      const res = await fetch(`/api/settings/karats/${id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete karat');
+      notify(data.message || `${name} deleted successfully`);
+      fetchKarats();
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error deleting karat');
+    } finally {
+      setDeletingKaratId(null);
     }
   };
 
@@ -736,6 +761,7 @@ export default function SettingsPage() {
                   <th className="py-3 px-4">Description</th>
                   <th className="py-3 px-3">Default Rate</th>
                   <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
@@ -753,6 +779,18 @@ export default function SettingsPage() {
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
                         ACTIVE
                       </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteKarat(k.id, k.name)}
+                        disabled={deletingKaratId === k.id}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg text-xs font-semibold transition disabled:opacity-50"
+                        title={`Delete ${k.name}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete</span>
+                      </button>
                     </td>
                   </tr>
                 ))}
