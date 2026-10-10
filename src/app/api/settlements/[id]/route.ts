@@ -36,6 +36,10 @@ export async function GET(
     const dollLossTxn = settlement.transactions.find((t) => t.notes?.includes('(Doll loss)'));
     const dollLossWeight = dollLossTxn ? toDecimal(dollLossTxn.weight).toFixed(3) : '0.000';
     const returnTxn = settlement.transactions.find((t) => t.type === 'SETTLEMENT_RETURN');
+    const makingGoldTxn = settlement.transactions.find((t) => t.notes?.includes('(Making charge deducted in gold)'));
+    const makingGoldWeight = makingGoldTxn
+      ? toDecimal(makingGoldTxn.weight).toFixed(3)
+      : toDecimal(settlement.chargeableWeight).toFixed(3);
     const returnedGoldWeight = returnTxn
       ? toDecimal(returnTxn.weight).toFixed(3)
       : Math.max(
@@ -64,6 +68,7 @@ export async function GET(
         settlementAction: settlement.settlementAction,
         settledWeight: toDecimal(settlement.settledWeight).toFixed(3),
         returnedGoldWeight,
+        makingGoldWeight,
         dukanLossWeight,
         dollLossWeight,
         carryForwardWeight: toDecimal(settlement.carryForwardWeight).toFixed(3),
@@ -102,5 +107,57 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching settlement details:', error);
     return NextResponse.json({ error: 'Failed to fetch settlement receipt' }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireUser();
+    const { id } = await params;
+    const body = await req.json();
+
+    const {
+      dukanLossWeight,
+      dollLossWeight,
+      returnGoldWeight,
+      makingGoldWeight,
+      carryForwardWeight,
+      notes,
+      reason,
+    } = body;
+
+    const { updateSettlement } = await import('@/lib/ledger-service');
+
+    const result = await updateSettlement({
+      settlementId: id,
+      dukanLossWeight,
+      dollLossWeight,
+      returnGoldWeight,
+      makingGoldWeight,
+      carryForwardWeight,
+      notes,
+      reason: reason || 'Settlement adjustments updated via edit modal',
+      userId: user.userId,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Settlement updated successfully',
+      settlement: result.settlement,
+      dukanLossWeight: result.dukanLossWeight,
+      dollLossWeight: result.dollLossWeight,
+      returnGoldWeight: result.returnGoldWeight,
+      makingGoldWeight: result.makingGoldWeight,
+      remainingBalance: result.remainingBalance,
+    });
+  } catch (error: unknown) {
+    console.error('Error updating settlement:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update settlement' },
+      { status: 500 }
+    );
   }
 }

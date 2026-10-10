@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Printer, Pencil, CheckCircle2 } from 'lucide-react';
+import { EditSettlementModal } from '@/components/EditSettlementModal';
 
 interface SettlementDetail {
   id: string;
@@ -30,6 +31,7 @@ interface SettlementDetail {
   settlementAction: string;
   settledWeight: string;
   returnedGoldWeight?: string;
+  makingGoldWeight?: string;
   dukanLossWeight?: string;
   dollLossWeight?: string;
   carryForwardWeight: string;
@@ -75,6 +77,9 @@ export default function SettlementReceiptPage({
     business: BusinessProfile;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
   const fetchReceipt = () => {
     setIsLoading(true);
     fetch(`/api/settlements/${id}`)
@@ -136,6 +141,14 @@ export default function SettlementReceiptPage({
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
+      {/* Toast */}
+      {toastMessage && (
+        <div className="fixed top-4 right-4 z-50 bg-emerald-900 text-white px-4 py-2.5 rounded-xl shadow-lg text-xs font-semibold flex items-center gap-2 border border-emerald-700 animate-in fade-in slide-in-from-top-2 no-print">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          {toastMessage}
+        </div>
+      )}
+
       {/* Action Bar (Hidden when printing) */}
       <div className="flex items-center justify-between no-print gap-4">
         <Link
@@ -145,13 +158,23 @@ export default function SettlementReceiptPage({
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Settlements
         </Link>
 
-        <button
-          onClick={handlePrint}
-          className="flex items-center gap-1.5 px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition shadow-xs"
-        >
-          <Printer className="w-3.5 h-3.5" />
-          <span>Print Receipt (A4)</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setEditModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold transition shadow-xs"
+          >
+            <Pencil className="w-3.5 h-3.5 text-amber-700" />
+            <span>Edit Settlement</span>
+          </button>
+
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition shadow-xs"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print Receipt (A4)</span>
+          </button>
+        </div>
       </div>
 
       {/* Professional A4 Printable Settlement Receipt */}
@@ -192,88 +215,44 @@ export default function SettlementReceiptPage({
           </div>
         </div>
 
-        {/* Gold Summary */}
+        {/* Gold Summary: Only In Total, Making Charge, and Return to Customer */}
         <div>
           <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 mb-2">
-            Workshop Gold Weight Summary
+            Settlement Gold Summary
           </h4>
           <table className="w-full text-xs text-left border border-slate-200 rounded-xl overflow-hidden">
             <tbody className="divide-y divide-slate-200">
               <tr className="bg-slate-50">
-                <td className="py-2.5 px-4 text-slate-600">Total Received (IN)</td>
-                <td className="py-2.5 px-4 text-right font-mono font-bold text-emerald-700">
+                <td className="py-3 px-4 font-bold text-slate-700">In Total</td>
+                <td className="py-3 px-4 text-right font-mono font-bold text-base text-slate-900">
                   {settlement.totalInWeight} g
                 </td>
               </tr>
+
               <tr>
-                <td className="py-2.5 px-4 text-slate-600">Finished Work Returned (OUT)</td>
-                <td className="py-2.5 px-4 text-right font-mono font-bold text-blue-700">
-                  {settlement.totalOutWeight} g
+                <td className="py-3 px-4 text-slate-700">
+                  <div className="font-bold">Making Charge</div>
+                  {parseFloat(settlement.makingRate) > 0 && (
+                    <div className="text-[11px] text-slate-400">
+                      Rate: {settlement.makingRate}/100g
+                    </div>
+                  )}
                 </td>
-              </tr>
-              <tr className="bg-slate-50 font-bold">
-                <td className="py-2.5 px-4 text-slate-900">Loss / Difference (IN − OUT)</td>
-                <td className="py-2.5 px-4 text-right font-mono text-base text-slate-950">
-                  {settlement.remainingBefore} g
+                <td className="py-3 px-4 text-right font-mono font-bold text-amber-800">
+                  {settlement.chargeableWeight} g
                 </td>
               </tr>
 
-              {parseFloat(settlement.chargeableWeight) > 0 && (
-                <tr>
-                  <td className="py-2.5 px-4 text-slate-600">
-                    <div>Less: Making Charge Deducted in Gold</div>
-                    {parseFloat(settlement.makingRate) > 0 && (
-                      <div className="text-[11px] text-amber-800 font-medium">
-                        Rate: {settlement.makingRate}/100g on {parseFloat(settlement.totalOutWeight) > 0 ? settlement.totalOutWeight : settlement.totalInWeight}g order
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-2.5 px-4 text-right font-mono font-bold text-amber-800">
-                    −{settlement.chargeableWeight} g
-                  </td>
-                </tr>
-              )}
-              {parseFloat(settlement.dukanLossWeight || '0') > 0 && (
-                <tr>
-                  <td className="py-2.5 px-4 text-slate-600">
-                    <div>Less: Dukan Loss (Shop Loss / Melting Wastage)</div>
-                  </td>
-                  <td className="py-2.5 px-4 text-right font-mono font-bold text-red-700">
-                    −{settlement.dukanLossWeight} g
-                  </td>
-                </tr>
-              )}
-              {parseFloat(settlement.dollLossWeight || '0') > 0 && (
-                <tr>
-                  <td className="py-2.5 px-4 text-slate-600">
-                    <div>Less: Doll Loss (ढोल नुकसान / Doll Loss)</div>
-                  </td>
-                  <td className="py-2.5 px-4 text-right font-mono font-bold text-rose-700">
-                    −{settlement.dollLossWeight} g
-                  </td>
-                </tr>
-              )}
-              <tr className="bg-emerald-50/50">
-                <td className="py-2.5 px-4 text-emerald-950 font-bold">Remaining Gold Returned to Customer</td>
-                <td className="py-2.5 px-4 text-right font-mono font-black text-emerald-800">
+              <tr className="bg-emerald-50/60 font-bold">
+                <td className="py-3.5 px-4 text-emerald-950 font-black">Return to Customer</td>
+                <td className="py-3.5 px-4 text-right font-mono font-black text-lg text-emerald-800">
                   {settlement.returnedGoldWeight ||
                     Math.max(
                       0,
                       parseFloat(settlement.settledWeight) -
-                        parseFloat(settlement.chargeableWeight || '0') -
-                        parseFloat(settlement.dukanLossWeight || '0') -
-                        parseFloat(settlement.dollLossWeight || '0')
+                        parseFloat(settlement.chargeableWeight || '0')
                     ).toFixed(3)}{' '}
                   g
-                </td>
-              </tr>
-
-              <tr className="bg-amber-50/60 font-black">
-                <td className="py-3 px-4 text-amber-950 uppercase tracking-wider">
-                  Closing Ledger Balance
-                </td>
-                <td className="py-3 px-4 text-right font-mono text-base text-amber-950">
-                  {settlement.carryForwardWeight} g
                 </td>
               </tr>
             </tbody>
@@ -287,23 +266,34 @@ export default function SettlementReceiptPage({
             <span>{settlement.notes}</span>
           </div>
         )}
-
-        {/* Footer Signature Blocks */}
-        <div className="pt-16 grid grid-cols-2 gap-8 text-center text-xs">
-          <div>
-            <div className="w-48 mx-auto border-t border-slate-400 pt-2 font-bold text-slate-800">
-              Customer Signature
-            </div>
-          </div>
-
-          <div>
-            <div className="w-48 mx-auto border-t border-slate-400 pt-2 font-bold text-slate-800">
-              Authorized Signature
-            </div>
-            <div className="text-[10px] text-slate-400 mt-0.5">({business.name})</div>
-          </div>
-        </div>
       </div>
+
+      <EditSettlementModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        settlement={
+          settlement
+            ? {
+                id: settlement.id,
+                settlementNumber: settlement.settlementNumber,
+                customerName: settlement.customer.name,
+                karatName: settlement.karat.name,
+                totalInWeight: settlement.totalInWeight,
+                dukanLossWeight: settlement.dukanLossWeight,
+                dollLossWeight: settlement.dollLossWeight,
+                makingGoldWeight: settlement.makingGoldWeight || settlement.chargeableWeight,
+                returnedGoldWeight: settlement.returnedGoldWeight,
+                carryForwardWeight: settlement.carryForwardWeight,
+                notes: settlement.notes || undefined,
+              }
+            : null
+        }
+        onSuccess={() => {
+          setToastMessage('Settlement updated successfully! Balance recalculated.');
+          setTimeout(() => setToastMessage(null), 4000);
+          fetchReceipt();
+        }}
+      />
     </div>
   );
 }

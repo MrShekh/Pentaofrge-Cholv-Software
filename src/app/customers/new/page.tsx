@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, UserPlus, AlertCircle } from 'lucide-react';
+import ContactPickerButton from '@/components/ContactPickerButton';
 
 export default function NewCustomerPage() {
   const router = useRouter();
@@ -73,32 +74,59 @@ export default function NewCustomerPage() {
       )}
 
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-5">
+        {/* Tablet Contact Picker Banner */}
+        <ContactPickerButton
+          variant="banner"
+          label="Pick Contact"
+          onSelect={({ name: pickedName, phone: pickedPhone }) => {
+            if (pickedName) setName(pickedName);
+            if (pickedPhone) setPhone(pickedPhone);
+          }}
+        />
+
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-              Customer Name *
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Customer Name *
+              </label>
+            </div>
             <input
               type="text"
               required
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Ramesh Soni"
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-              Phone Number *
-            </label>
-            <input
-              type="tel"
-              required
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Phone Number *
+              </label>
+              <ContactPickerButton
+                variant="button"
+                label="Pick from Tablet"
+                className="text-[11px] py-1 px-2.5"
+                onSelect={({ name: pickedName, phone: pickedPhone }) => {
+                  if (pickedName && !name) setName(pickedName);
+                  if (pickedPhone) setPhone(pickedPhone);
+                }}
+              />
+            </div>
+            <div className="relative">
+              <input
+                type="tel"
+                required
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="e.g. 9876543210"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+              />
+            </div>
           </div>
         </div>
 

@@ -14,8 +14,10 @@ import {
   FileCheck,
   Calculator,
   Sparkles,
+  Pencil,
 } from 'lucide-react';
 import { SettlementAction, ChargeBasis } from '@prisma/client';
+import { EditSettlementModal, SettlementEditData } from '@/components/EditSettlementModal';
 
 interface SettlementItem {
   id: string;
@@ -34,6 +36,7 @@ interface SettlementItem {
   settlementAction: string;
   settledWeight: string;
   returnedGoldWeight?: string;
+  makingGoldWeight?: string;
   dukanLossWeight?: string;
   dollLossWeight?: string;
   carryForwardWeight: string;
@@ -104,6 +107,27 @@ function SettlementsContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  // Edit Settlement Modal State
+  const [editSettlementModalOpen, setEditSettlementModalOpen] = useState(false);
+  const [settlementToEdit, setSettlementToEdit] = useState<SettlementEditData | null>(null);
+
+  const handleOpenEditSettlement = (s: SettlementItem) => {
+    setSettlementToEdit({
+      id: s.id,
+      settlementNumber: s.settlementNumber,
+      customerName: s.customerName,
+      karatName: s.karatName,
+      totalInWeight: s.totalInWeight,
+      dukanLossWeight: s.dukanLossWeight,
+      dollLossWeight: s.dollLossWeight,
+      makingGoldWeight: s.makingGoldWeight || s.chargeableWeight,
+      returnedGoldWeight: s.returnedGoldWeight,
+      carryForwardWeight: s.carryForwardWeight,
+      notes: s.notes || undefined,
+    });
+    setEditSettlementModalOpen(true);
+  };
 
   const recalculateMaking = (
     owStr: string,
@@ -359,7 +383,7 @@ function SettlementsContent() {
                 <th className="py-3 px-3 text-right">Doll Loss</th>
                 <th className="py-3 px-3 text-right">Making Charge</th>
                 <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-4 text-center">Receipt</th>
+                <th className="py-3 px-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
@@ -493,13 +517,23 @@ function SettlementsContent() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <Link
-                          href={`/settlements/${s.id}`}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-slate-700 hover:text-slate-900 text-[11px] font-bold transition shadow-2xs"
-                        >
-                          <Printer className="w-3 h-3 text-slate-400" />
-                          <span>Receipt</span>
-                        </Link>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenEditSettlement(s)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 rounded-lg text-[11px] font-bold transition shadow-2xs"
+                            title="Edit settlement adjustments"
+                          >
+                            <Pencil className="w-3 h-3 text-amber-700" />
+                            <span>Edit</span>
+                          </button>
+                          <Link
+                            href={`/settlements/${s.id}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-slate-700 hover:text-slate-900 text-[11px] font-bold transition shadow-2xs"
+                          >
+                            <Printer className="w-3 h-3 text-slate-400" />
+                            <span>Receipt</span>
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -902,6 +936,24 @@ function SettlementsContent() {
           </div>
         </div>
       )}
+
+      {/* Edit Settlement Modal */}
+      <EditSettlementModal
+        isOpen={editSettlementModalOpen}
+        onClose={() => {
+          setEditSettlementModalOpen(false);
+          setSettlementToEdit(null);
+        }}
+        settlement={settlementToEdit}
+        onSuccess={() => {
+          setSuccessToast('Settlement updated successfully! Balance recalculated.');
+          setTimeout(() => setSuccessToast(null), 4000);
+          fetchSettlements();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('transaction-updated'));
+          }
+        }}
+      />
     </div>
   );
 }

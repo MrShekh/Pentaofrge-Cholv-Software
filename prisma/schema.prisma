@@ -281,3 +281,33 @@ model AppSetting {
   description String?
   updatedAt   DateTime @updatedAt
 }
+
+enum KarigarCashCategory {
+  ADVANCE
+  SALARY
+  OTHER
+}
+
+enum KarigarCashStatus {
+  GIVEN
+  RECEIVED
+}
+
+model KarigarCash {
+  id           String              @id @default(cuid())
+  entryNumber  String              @unique
+  karigarName  String
+  phone        String?
+  category     KarigarCashCategory @default(ADVANCE)
+  amount       Decimal             @db.Decimal(15, 2)
+  date         DateTime            @default(now())
+  status       KarigarCashStatus   @default(GIVEN)
+  settledAt    DateTime?
+  notes        String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([karigarName])
+  @@index([date])
+  @@index([status])
+}

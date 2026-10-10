@@ -770,3 +770,276 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
     };
   }, { timeout: 35000, maxWait: 15000 });
 }
+
+export interface UpdateSettlementInput {
+  settlementId: string;
+  dukanLossWeight?: number | string | Decimal;
+  dollLossWeight?: number | string | Decimal;
+  returnGoldWeight?: number | string | Decimal;
+  makingGoldWeight?: number | string | Decimal;
+  carryForwardWeight?: number | string | Decimal;
+  notes?: string;
+  reason?: string;
+  userId: string;
+}
+
+/**
+ * Updates an existing settlement's weight adjustments (e.g. correcting Dukan loss, Doll loss, Return gold)
+ * and safely recalculates the customer's cached account balance.
+ */
+export async function updateSettlement(input: UpdateSettlementInput) {
+  return await prisma.$transaction(async (tx) => {
+    const settlement = await tx.settlement.findUniqueOrThrow({
+      where: { id: input.settlementId },
+      include: {
+        customer: true,
+        karat: true,
+        transactions: {
+          where: { status: TransactionStatus.ACTIVE },
+        },
+      },
+    });
+
+    const account = await ensureCustomerKaratAccount(settlement.customerId, settlement.karatId, tx);
+    const getNextTxnNumber = await getNextTransactionSequence(tx);
+
+    // Locate existing settlement adjustment / return transactions
+    const dukanTxn = settlement.transactions.find((t) => t.notes?.includes('(Dukan loss)'));
+    const dollTxn = settlement.transactions.find((t) => t.notes?.includes('(Doll loss)'));
+    const returnTxn = settlement.transactions.find((t) => t.type === TransactionType.SETTLEMENT_RETURN);
+    const makingTxn = settlement.transactions.find((t) => t.notes?.includes('(Making charge deducted in gold)'));
+
+    // Check for carry forward opening balance transaction
+    const carryForwardTxn = await tx.transaction.findFirst({
+      where: {
+        notes: { contains: settlement.settlementNumber },
+        type: TransactionType.OPENING_BALANCE,
+        status: TransactionStatus.ACTIVE,
+      },
+    });
+
+    // 1. Dukan Loss update
+    let finalDukanLoss = dukanTxn ? toDecimal(dukanTxn.weight) : new Decimal(0);
+    if (input.dukanLossWeight !== undefined) {
+      finalDukanLoss = Decimal.max(0, toDecimal(input.dukanLossWeight));
+      if (dukanTxn) {
+        if (finalDukanLoss.gt(0)) {
+          await tx.transaction.update({
+            where: { id: dukanTxn.id },
+            data: { weight: new Prisma.Decimal(finalDukanLoss.toFixed(3)) },
+          });
+        } else {
+          await tx.transaction.delete({ where: { id: dukanTxn.id } });
+        }
+      } else if (finalDukanLoss.gt(0)) {
+        await tx.transaction.create({
+          data: {
+            transactionNumber: await getNextTxnNumber(),
+            customerId: settlement.customerId,
+            karatId: settlement.karatId,
+            accountId: account.id,
+            type: TransactionType.SETTLEMENT_ADJUSTMENT,
+            weight: new Prisma.Decimal(finalDukanLoss.toFixed(3)),
+            transactionDate: settlement.settlementDate,
+            notes: `Settlement: ${settlement.settlementNumber} (Dukan loss)`,
+            settlementId: settlement.id,
+            status: TransactionStatus.ACTIVE,
+            createdById: input.userId,
+          },
+        });
+      }
+    }
+
+    // 2. Doll Loss update
+    let finalDollLoss = dollTxn ? toDecimal(dollTxn.weight) : new Decimal(0);
+    if (input.dollLossWeight !== undefined) {
+      finalDollLoss = Decimal.max(0, toDecimal(input.dollLossWeight));
+      if (dollTxn) {
+        if (finalDollLoss.gt(0)) {
+          await tx.transaction.update({
+            where: { id: dollTxn.id },
+            data: { weight: new Prisma.Decimal(finalDollLoss.toFixed(3)) },
+          });
+        } else {
+          await tx.transaction.delete({ where: { id: dollTxn.id } });
+        }
+      } else if (finalDollLoss.gt(0)) {
+        await tx.transaction.create({
+          data: {
+            transactionNumber: await getNextTxnNumber(),
+            customerId: settlement.customerId,
+            karatId: settlement.karatId,
+            accountId: account.id,
+            type: TransactionType.SETTLEMENT_ADJUSTMENT,
+            weight: new Prisma.Decimal(finalDollLoss.toFixed(3)),
+            transactionDate: settlement.settlementDate,
+            notes: `Settlement: ${settlement.settlementNumber} (Doll loss)`,
+            settlementId: settlement.id,
+            status: TransactionStatus.ACTIVE,
+            createdById: input.userId,
+          },
+        });
+      }
+    }
+
+    // 3. Return Gold update
+    let finalReturnGold = returnTxn ? toDecimal(returnTxn.weight) : new Decimal(0);
+    if (input.returnGoldWeight !== undefined) {
+      finalReturnGold = Decimal.max(0, toDecimal(input.returnGoldWeight));
+      if (returnTxn) {
+        if (finalReturnGold.gt(0)) {
+          await tx.transaction.update({
+            where: { id: returnTxn.id },
+            data: { weight: new Prisma.Decimal(finalReturnGold.toFixed(3)) },
+          });
+        } else {
+          await tx.transaction.delete({ where: { id: returnTxn.id } });
+        }
+      } else if (finalReturnGold.gt(0)) {
+        await tx.transaction.create({
+          data: {
+            transactionNumber: await getNextTxnNumber(),
+            customerId: settlement.customerId,
+            karatId: settlement.karatId,
+            accountId: account.id,
+            type: TransactionType.SETTLEMENT_RETURN,
+            weight: new Prisma.Decimal(finalReturnGold.toFixed(3)),
+            transactionDate: settlement.settlementDate,
+            notes: `Settlement: ${settlement.settlementNumber} (Gold returned to customer)`,
+            settlementId: settlement.id,
+            status: TransactionStatus.ACTIVE,
+            createdById: input.userId,
+          },
+        });
+      }
+    }
+
+    // 4. Making Gold update
+    let finalMakingGold = makingTxn ? toDecimal(makingTxn.weight) : toDecimal(settlement.chargeableWeight || 0);
+    if (input.makingGoldWeight !== undefined) {
+      finalMakingGold = Decimal.max(0, toDecimal(input.makingGoldWeight));
+      if (makingTxn) {
+        if (finalMakingGold.gt(0)) {
+          await tx.transaction.update({
+            where: { id: makingTxn.id },
+            data: { weight: new Prisma.Decimal(finalMakingGold.toFixed(3)) },
+          });
+        } else {
+          await tx.transaction.delete({ where: { id: makingTxn.id } });
+        }
+      } else if (finalMakingGold.gt(0)) {
+        await tx.transaction.create({
+          data: {
+            transactionNumber: await getNextTxnNumber(),
+            customerId: settlement.customerId,
+            karatId: settlement.karatId,
+            accountId: account.id,
+            type: TransactionType.SETTLEMENT_ADJUSTMENT,
+            weight: new Prisma.Decimal(finalMakingGold.toFixed(3)),
+            transactionDate: settlement.settlementDate,
+            notes: `Settlement: ${settlement.settlementNumber} (Making charge deducted in gold)`,
+            settlementId: settlement.id,
+            status: TransactionStatus.ACTIVE,
+            createdById: input.userId,
+          },
+        });
+      }
+    }
+
+    // 5. Carry forward balance (if applicable)
+    let finalCarryForward = carryForwardTxn ? toDecimal(carryForwardTxn.weight) : toDecimal(settlement.carryForwardWeight || 0);
+    if (input.carryForwardWeight !== undefined) {
+      finalCarryForward = Decimal.max(0, toDecimal(input.carryForwardWeight));
+      if (carryForwardTxn) {
+        if (finalCarryForward.gt(0)) {
+          await tx.transaction.update({
+            where: { id: carryForwardTxn.id },
+            data: { weight: new Prisma.Decimal(finalCarryForward.toFixed(3)) },
+          });
+        } else {
+          await tx.transaction.delete({ where: { id: carryForwardTxn.id } });
+        }
+      } else if (finalCarryForward.gt(0)) {
+        await tx.transaction.create({
+          data: {
+            transactionNumber: await getNextTxnNumber(),
+            customerId: settlement.customerId,
+            karatId: settlement.karatId,
+            accountId: account.id,
+            type: TransactionType.OPENING_BALANCE,
+            weight: new Prisma.Decimal(finalCarryForward.toFixed(3)),
+            transactionDate: settlement.settlementDate,
+            notes: `Opening balance carried forward from ${settlement.settlementNumber}`,
+            settlementId: null,
+            status: TransactionStatus.ACTIVE,
+            createdById: input.userId,
+          },
+        });
+      }
+    }
+
+    // Recompute total settled gold
+    const totalSettledGold = finalReturnGold.plus(finalMakingGold).plus(finalDukanLoss).plus(finalDollLoss);
+
+    // Update settlement notes if provided
+    let updatedNotes = settlement.notes;
+    if (input.notes !== undefined) {
+      updatedNotes = input.notes;
+    }
+
+    // Update Settlement entity
+    const updatedSettlement = await tx.settlement.update({
+      where: { id: settlement.id },
+      data: {
+        settledWeight: new Prisma.Decimal(totalSettledGold.toFixed(3)),
+        chargeableWeight: new Prisma.Decimal(finalMakingGold.toFixed(3)),
+        carryForwardWeight: new Prisma.Decimal(finalCarryForward.toFixed(3)),
+        notes: updatedNotes,
+      },
+      include: {
+        customer: true,
+        karat: true,
+      },
+    });
+
+    // Update cached account balance
+    const updatedSummary = await getAccountLedgerSummary(settlement.customerId, settlement.karatId, tx);
+    await tx.customerKaratAccount.update({
+      where: { id: account.id },
+      data: {
+        cachedBalance: new Prisma.Decimal(updatedSummary.currentBalance.toFixed(3)),
+      },
+    });
+
+    // Audit log
+    const user = await tx.user.findUnique({ where: { id: input.userId } });
+    await logAudit({
+      userId: input.userId,
+      username: user?.username,
+      action: 'UPDATE',
+      entity: 'SETTLEMENT',
+      entityId: settlement.id,
+      newValue: {
+        settlementNumber: settlement.settlementNumber,
+        customer: settlement.customer.name,
+        karat: settlement.karat.name,
+        dukanLossWeight: finalDukanLoss.toFixed(3),
+        dollLossWeight: finalDollLoss.toFixed(3),
+        returnGoldWeight: finalReturnGold.toFixed(3),
+        makingGoldWeight: finalMakingGold.toFixed(3),
+        settledWeight: totalSettledGold.toFixed(3),
+        newAccountBalance: updatedSummary.currentBalance.toFixed(3),
+      },
+      reason: input.reason || 'Settlement weights edited and updated',
+    });
+
+    return {
+      settlement: updatedSettlement,
+      dukanLossWeight: finalDukanLoss.toFixed(3),
+      dollLossWeight: finalDollLoss.toFixed(3),
+      returnGoldWeight: finalReturnGold.toFixed(3),
+      makingGoldWeight: finalMakingGold.toFixed(3),
+      remainingBalance: updatedSummary.currentBalance.toFixed(3),
+    };
+  }, { timeout: 35000, maxWait: 15000 });
+}

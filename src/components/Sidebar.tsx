@@ -8,6 +8,7 @@ import {
   Users,
   ReceiptText,
   Scale,
+  Banknote,
   FileSpreadsheet,
   Settings,
   LogOut,
@@ -39,6 +40,7 @@ export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
     { href: '/customers', label: 'Customers', icon: Users },
     { href: '/transactions', label: 'Transactions', icon: ReceiptText },
     { href: '/settlements', label: 'Settlements', icon: Scale },
+    { href: '/karigar-cash', label: 'Karigar Cash', icon: Banknote },
     { href: '/reports', label: 'Reports', icon: FileSpreadsheet },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];

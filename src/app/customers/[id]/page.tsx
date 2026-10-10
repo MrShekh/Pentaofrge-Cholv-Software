@@ -17,8 +17,10 @@ import {
   IndianRupee,
   CheckCircle,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 import { QuickTransactionModal } from '@/components/QuickTransactionModal';
+import { EditSettlementModal, SettlementEditData } from '@/components/EditSettlementModal';
 import { TransactionType } from '@prisma/client';
 
 interface KaratAccountData {
@@ -92,6 +94,25 @@ export default function CustomerDetailPage({
   const [quickTxType, setQuickTxType] = useState<TransactionType>(TransactionType.IN);
   const [targetKaratId, setTargetKaratId] = useState<string | undefined>(undefined);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+
+  // Edit Settlement Modal states
+  const [editSettlementModalOpen, setEditSettlementModalOpen] = useState(false);
+  const [settlementToEdit, setSettlementToEdit] = useState<SettlementEditData | null>(null);
+
+  const handleOpenEditSettlement = (s: SettlementItem) => {
+    setSettlementToEdit({
+      id: s.id,
+      settlementNumber: s.settlementNumber,
+      customerName: data?.customer?.name,
+      karatName: s.karatName,
+      totalInWeight: s.totalInWeight,
+      dukanLossWeight: s.dukanLossWeight,
+      dollLossWeight: s.dollLossWeight,
+      makingGoldWeight: s.makingGoldWeight,
+      returnedGoldWeight: s.returnedGoldWeight,
+    });
+    setEditSettlementModalOpen(true);
+  };
 
   // Delete customer modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -406,12 +427,21 @@ export default function CustomerDetailPage({
                     </div>
                   </div>
 
-                  <Link
-                    href={`/settlements/${s.id}`}
-                    className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-xs font-bold transition shadow-xs shrink-0"
-                  >
-                    View Receipt
-                  </Link>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => handleOpenEditSettlement(s)}
+                      className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                    >
+                      <Pencil className="w-3 h-3 text-amber-700" />
+                      <span>Edit</span>
+                    </button>
+                    <Link
+                      href={`/settlements/${s.id}`}
+                      className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-xs font-bold transition shadow-xs"
+                    >
+                      View Receipt
+                    </Link>
+                  </div>
                 </div>
 
                 {/* Numbers Grid */}
@@ -502,6 +532,24 @@ export default function CustomerDetailPage({
           </div>
         </div>
       )}
+
+      {/* Edit Settlement Modal */}
+      <EditSettlementModal
+        isOpen={editSettlementModalOpen}
+        onClose={() => {
+          setEditSettlementModalOpen(false);
+          setSettlementToEdit(null);
+        }}
+        settlement={settlementToEdit}
+        onSuccess={() => {
+          setFeedbackMessage('Settlement updated successfully! Balance recalculated.');
+          setTimeout(() => setFeedbackMessage(null), 4000);
+          fetchCustomer();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('transaction-updated'));
+          }
+        }}
+      />
     </div>
   );
 }

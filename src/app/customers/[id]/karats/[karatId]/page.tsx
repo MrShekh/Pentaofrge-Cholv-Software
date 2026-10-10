@@ -14,9 +14,11 @@ import {
   Clock,
   Layers,
   CheckCircle,
+  Pencil,
 } from 'lucide-react';
 import { QuickTransactionModal } from '@/components/QuickTransactionModal';
 import { VoidTransactionModal } from '@/components/VoidTransactionModal';
+import { EditSettlementModal, SettlementEditData } from '@/components/EditSettlementModal';
 import { TransactionType } from '@prisma/client';
 
 interface LedgerItem {
@@ -118,6 +120,25 @@ export default function CustomerKaratLedgerPage({
     customerName?: string;
     karatName?: string;
   } | null>(null);
+
+  // Edit Settlement Modal
+  const [editSettlementModalOpen, setEditSettlementModalOpen] = useState(false);
+  const [settlementToEdit, setSettlementToEdit] = useState<SettlementEditData | null>(null);
+
+  const handleOpenEditSettlement = (s: SettlementHistoryItem) => {
+    setSettlementToEdit({
+      id: s.id,
+      settlementNumber: s.settlementNumber,
+      customerName: data?.customer?.name,
+      karatName: data?.karat?.name,
+      totalInWeight: s.totalInWeight,
+      dukanLossWeight: s.dukanLossWeight,
+      dollLossWeight: s.dollLossWeight,
+      makingGoldWeight: s.makingGoldWeight,
+      returnedGoldWeight: s.returnedGoldWeight,
+    });
+    setEditSettlementModalOpen(true);
+  };
 
   const fetchLedger = () => {
     setIsLoading(true);
@@ -357,12 +378,21 @@ export default function CustomerKaratLedgerPage({
                   </div>
                 </div>
 
-                <Link
-                  href={`/settlements/${s.id}`}
-                  className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition shadow-xs"
-                >
-                  View Receipt
-                </Link>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleOpenEditSettlement(s)}
+                    className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                  >
+                    <Pencil className="w-3 h-3 text-amber-700" />
+                    <span>Edit</span>
+                  </button>
+                  <Link
+                    href={`/settlements/${s.id}`}
+                    className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition shadow-xs"
+                  >
+                    View Receipt
+                  </Link>
+                </div>
               </div>
 
               <div className="grid grid-cols-5 gap-1.5 pt-2 border-t border-slate-100 text-center text-xs">
@@ -569,6 +599,20 @@ export default function CustomerKaratLedgerPage({
           fetchLedger();
         }}
         transaction={txToVoid}
+      />
+
+      <EditSettlementModal
+        isOpen={editSettlementModalOpen}
+        onClose={() => {
+          setEditSettlementModalOpen(false);
+          setSettlementToEdit(null);
+        }}
+        settlement={settlementToEdit}
+        onSuccess={(res) => {
+          setToastMessage('Settlement updated successfully! Balance recalculated.');
+          setTimeout(() => setToastMessage(null), 4000);
+          fetchLedger();
+        }}
       />
     </div>
   );

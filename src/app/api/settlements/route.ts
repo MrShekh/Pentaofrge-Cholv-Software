@@ -42,6 +42,10 @@ export async function GET(req: NextRequest) {
         const dollLossTxn = s.transactions.find((t) => t.notes?.includes('(Doll loss)'));
         const dollLossWeight = dollLossTxn ? toDecimal(dollLossTxn.weight).toFixed(3) : '0.000';
         const returnTxn = s.transactions.find((t) => t.type === 'SETTLEMENT_RETURN');
+        const makingGoldTxn = s.transactions.find((t) => t.notes?.includes('(Making charge deducted in gold)'));
+        const makingGoldWeight = makingGoldTxn
+          ? toDecimal(makingGoldTxn.weight).toFixed(3)
+          : toDecimal(s.chargeableWeight).toFixed(3);
         const returnedGoldWeight = returnTxn
           ? toDecimal(returnTxn.weight).toFixed(3)
           : Math.max(
@@ -70,6 +74,7 @@ export async function GET(req: NextRequest) {
           settlementAction: s.settlementAction,
           settledWeight: toDecimal(s.settledWeight).toFixed(3),
           returnedGoldWeight,
+          makingGoldWeight,
           dukanLossWeight,
           dollLossWeight,
           carryForwardWeight: toDecimal(s.carryForwardWeight).toFixed(3),
