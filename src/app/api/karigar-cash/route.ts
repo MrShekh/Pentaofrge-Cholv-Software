@@ -139,15 +139,47 @@ export async function POST(req: NextRequest) {
 
     const entryNumber = `KCR-${nextSeq}`;
 
+    // Find or create Karigar
+    let targetKarigarId = body.karigarId;
+    if (!targetKarigarId) {
+      const existingKarigar = await prisma.karigar.findFirst({
+        where: { name: { equals: karigarName.trim(), mode: 'insensitive' } },
+      });
+      if (existingKarigar) {
+        targetKarigarId = existingKarigar.id;
+        if (phone && !existingKarigar.phone) {
+          await prisma.karigar.update({
+            where: { id: existingKarigar.id },
+            data: { phone: phone.trim() },
+          });
+        }
+      } else {
+        const createdKarigar = await prisma.karigar.create({
+          data: {
+            name: karigarName.trim(),
+            phone: phone ? phone.trim() : null,
+          },
+        });
+        targetKarigarId = createdKarigar.id;
+      }
+    }
+
+    const initialStatus =
+      body.status === 'RECEIVED'
+        ? KarigarCashStatus.RECEIVED
+        : KarigarCashStatus.GIVEN;
+
     const newEntry = await prisma.karigarCash.create({
       data: {
         entryNumber,
+        karigarId: targetKarigarId,
         karigarName: karigarName.trim(),
         phone: phone ? phone.trim() : null,
         category: (category as KarigarCashCategory) || KarigarCashCategory.ADVANCE,
         amount: numAmount,
         date: entryDate,
-        status: KarigarCashStatus.GIVEN,
+        status: initialStatus,
+        settledAt: initialStatus === KarigarCashStatus.RECEIVED ? new Date() : null,
         notes: notes ? notes.trim() : null,
       },
     });

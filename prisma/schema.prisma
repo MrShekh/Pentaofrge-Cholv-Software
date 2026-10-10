@@ -291,11 +291,28 @@ enum KarigarCashCategory {
 enum KarigarCashStatus {
   GIVEN
   RECEIVED
+  PAID
+}
+
+model Karigar {
+  id          String        @id @default(cuid())
+  name        String
+  phone       String?
+  notes       String?
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  cashEntries KarigarCash[]
+
+  @@index([name])
+  @@index([phone])
 }
 
 model KarigarCash {
   id           String              @id @default(cuid())
   entryNumber  String              @unique
+  karigarId    String?
   karigarName  String
   phone        String?
   category     KarigarCashCategory @default(ADVANCE)
@@ -307,7 +324,11 @@ model KarigarCash {
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 
+  karigar      Karigar?            @relation(fields: [karigarId], references: [id], onDelete: Cascade)
+
+  @@index([karigarId])
   @@index([karigarName])
   @@index([date])
   @@index([status])
 }
+
