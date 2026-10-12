@@ -200,21 +200,29 @@ function SettlementsContent() {
     fetchSettlements();
 
     fetch('/api/customers')
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return res.json();
+      })
       .then((d) => {
-        if (d.customers) setCustomers(d.customers);
-      });
+        if (d?.customers) setCustomers(d.customers);
+      })
+      .catch((err) => console.warn('Customers fetch error:', err));
 
     fetch('/api/settings/karats')
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return res.json();
+      })
       .then((d) => {
-        if (d.karats) {
+        if (d?.karats) {
           setKarats(d.karats);
           if (!selectedKaratId && d.karats.length > 0) {
             setSelectedKaratId(d.karats[0].id);
           }
         }
-      });
+      })
+      .catch((err) => console.warn('Karats fetch error:', err));
   }, []);
 
   // Fetch ledger summary for selected customer & karat
