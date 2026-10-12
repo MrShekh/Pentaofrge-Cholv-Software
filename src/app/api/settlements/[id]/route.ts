@@ -24,7 +24,8 @@ export async function GET(
           },
           transactions: {
             where: { status: 'ACTIVE' },
-            select: { id: true, type: true, weight: true, notes: true },
+            select: { id: true, transactionNumber: true, type: true, weight: true, notes: true, transactionDate: true },
+            orderBy: { transactionDate: 'asc' },
           },
         },
       }),
@@ -93,6 +94,14 @@ export async function GET(
           referenceNo: p.referenceNo,
           notes: p.notes,
           createdBy: p.createdBy,
+        })),
+        transactions: settlement.transactions.map((t) => ({
+          id: t.id,
+          transactionNumber: t.transactionNumber,
+          type: t.type,
+          weight: toDecimal(t.weight).toFixed(3),
+          notes: t.notes,
+          transactionDate: t.transactionDate.toISOString(),
         })),
       },
       business: business || {

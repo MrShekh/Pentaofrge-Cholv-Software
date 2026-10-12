@@ -55,6 +55,14 @@ interface SettlementDetail {
     paymentMode: string;
     referenceNo: string | null;
   }>;
+  transactions?: Array<{
+    id: string;
+    transactionNumber: string;
+    type: string;
+    weight: string;
+    notes?: string | null;
+    transactionDate: string;
+  }>;
 }
 
 interface BusinessProfile {
@@ -132,12 +140,47 @@ export default function SettlementReceiptPage({
     year: 'numeric',
   });
 
-  const basisLabel =
-    settlement.chargeBasis === 'TOTAL_RECEIVED'
-      ? 'Received Weight'
-      : settlement.chargeBasis === 'FINISHED_OUT'
-      ? 'Finished OUT Weight'
-      : 'Manual Chargeable Weight';
+  const formatDateTime = (dateStr?: string | null) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      return (
+        d.toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        }) +
+        ', ' +
+        d.toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        })
+      );
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const inTransactions = (settlement.transactions || []).filter(
+    (t) => t.type === 'IN' || t.type === 'OPENING_BALANCE'
+  );
+
+  const outTransactions = (settlement.transactions || []).filter(
+    (t) => t.type === 'OUT'
+  );
+
+  const returnTransaction = (settlement.transactions || []).find(
+    (t) => t.type === 'SETTLEMENT_RETURN'
+  );
+
+  const returnGoldStr =
+    settlement.returnedGoldWeight ||
+    Math.max(
+      0,
+      parseFloat(settlement.settledWeight) -
+        parseFloat(settlement.chargeableWeight || '0')
+    ).toFixed(3);
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -179,7 +222,7 @@ export default function SettlementReceiptPage({
 
       {/* Professional A4 Printable Settlement Receipt */}
       <div className="print-page bg-white rounded-2xl border border-slate-200 shadow-md p-8 md:p-12 text-slate-900 font-sans space-y-6">
-        {/* Header */}
+        {/* Header: Only Main Title & Business Details */}
         <div className="text-center space-y-1 pb-6 border-b border-slate-200">
           <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900">
             {business.name}
@@ -192,43 +235,79 @@ export default function SettlementReceiptPage({
           </div>
         </div>
 
-        {/* Title & Receipt Meta */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200 pb-4">
-          <div>
-            <h3 className="text-base font-black uppercase tracking-wider text-slate-900">
-              Chool / Cutting Work Settlement
-            </h3>
-            <span className="text-xs text-slate-500">
-              Receipt No: <strong className="font-mono text-slate-800">{settlement.settlementNumber}</strong> • Karat: <strong className="text-amber-900 font-mono">{settlement.karat.name}</strong>
-            </span>
-          </div>
-
-          <div className="text-left sm:text-right text-xs space-y-0.5">
-            <div>
-              <span className="text-slate-500">Date:</span>{' '}
-              <strong className="font-mono">{settleDateStr}</strong>
-            </div>
-            <div>
-              <span className="text-slate-500">Period:</span>{' '}
-              <strong className="font-mono">{fromDateStr} – {toDateStr}</strong>
-            </div>
-          </div>
-        </div>
-
-        {/* Gold Summary: Only In Total, Making Charge, and Return to Customer */}
+        {/* Summary Table: Receive, Out, Total, Making Charge, Return to Customer with Date & Time */}
         <div>
-          <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 mb-2">
-            Settlement Gold Summary
-          </h4>
           <table className="w-full text-xs text-left border border-slate-200 rounded-xl overflow-hidden">
             <tbody className="divide-y divide-slate-200">
-              <tr className="bg-slate-50">
-                <td className="py-3 px-4 font-bold text-slate-700">In Total</td>
-                <td className="py-3 px-4 text-right font-mono font-bold text-base text-slate-900">
+              {/* Received (IN) Entries with Date & Time */}
+              {inTransactions.length > 0 ? (
+                inTransactions.map((tx, idx) => (
+                  <tr key={tx.id || idx} className="bg-slate-50/80">
+                    <td className="py-3 px-4 font-bold text-slate-700">
+                      <div>{inTransactions.length > 1 ? `Received (IN) #${idx + 1}` : 'Received (IN)'}</div>
+                      <div className="text-[11px] font-normal text-slate-500 font-mono mt-0.5">
+                        {formatDateTime(tx.transactionDate)}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-base text-slate-900 whitespace-nowrap">
+                      {tx.weight} g
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr className="bg-slate-50/80">
+                  <td className="py-3 px-4 font-bold text-slate-700">
+                    <div>Received (IN)</div>
+                    <div className="text-[11px] font-normal text-slate-500 font-mono mt-0.5">
+                      {formatDateTime(settlement.fromDate || settlement.settlementDate)}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-right font-mono font-bold text-base text-slate-900 whitespace-nowrap">
+                    {settlement.totalInWeight} g
+                  </td>
+                </tr>
+              )}
+
+              {/* OUT Entries with Date & Time (if done two times or more, shows each) */}
+              {outTransactions.length > 0 ? (
+                outTransactions.map((tx, idx) => (
+                  <tr key={tx.id || idx}>
+                    <td className="py-3 px-4 text-slate-700">
+                      <div className="font-bold">{outTransactions.length > 1 ? `Out #${idx + 1}` : 'Out'}</div>
+                      <div className="text-[11px] font-normal text-slate-500 font-mono mt-0.5">
+                        {formatDateTime(tx.transactionDate)}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-800 whitespace-nowrap">
+                      {tx.weight} g
+                    </td>
+                  </tr>
+                ))
+              ) : parseFloat(settlement.totalOutWeight || '0') > 0 ? (
+                <tr>
+                  <td className="py-3 px-4 text-slate-700">
+                    <div className="font-bold">Out</div>
+                    <div className="text-[11px] font-normal text-slate-500 font-mono mt-0.5">
+                      {formatDateTime(settlement.toDate || settlement.settlementDate)}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-right font-mono font-bold text-slate-800 whitespace-nowrap">
+                    {settlement.totalOutWeight} g
+                  </td>
+                </tr>
+              ) : null}
+
+              {/* Total */}
+              <tr className="bg-slate-50/40">
+                <td className="py-3 px-4 font-bold text-slate-800">
+                  Total
+                </td>
+                <td className="py-3 px-4 text-right font-mono font-bold text-base text-slate-900 whitespace-nowrap">
                   {settlement.totalInWeight} g
                 </td>
               </tr>
 
+              {/* Making Charge */}
               <tr>
                 <td className="py-3 px-4 text-slate-700">
                   <div className="font-bold">Making Charge</div>
@@ -238,34 +317,30 @@ export default function SettlementReceiptPage({
                     </div>
                   )}
                 </td>
-                <td className="py-3 px-4 text-right font-mono font-bold text-amber-800">
-                  {settlement.chargeableWeight} g
+                <td className="py-3 px-4 text-right font-mono font-bold text-amber-800 whitespace-nowrap">
+                  {parseFloat(settlement.finalMakingAmount) > 0 && parseFloat(settlement.chargeableWeight || '0') === 0
+                    ? `₹${settlement.finalMakingAmount}`
+                    : `${settlement.chargeableWeight} g`}
                 </td>
               </tr>
 
+              {/* Return to Customer with Date & Time */}
               <tr className="bg-emerald-50/60 font-bold">
-                <td className="py-3.5 px-4 text-emerald-950 font-black">Return to Customer</td>
-                <td className="py-3.5 px-4 text-right font-mono font-black text-lg text-emerald-800">
-                  {settlement.returnedGoldWeight ||
-                    Math.max(
-                      0,
-                      parseFloat(settlement.settledWeight) -
-                        parseFloat(settlement.chargeableWeight || '0')
-                    ).toFixed(3)}{' '}
-                  g
+                <td className="py-3.5 px-4 text-emerald-950 font-black">
+                  <div>Return to Customer</div>
+                  <div className="text-[11px] font-normal text-emerald-800 font-mono mt-0.5">
+                    {formatDateTime(
+                      returnTransaction?.transactionDate || settlement.settlementDate
+                    )}
+                  </div>
+                </td>
+                <td className="py-3.5 px-4 text-right font-mono font-black text-lg text-emerald-800 whitespace-nowrap">
+                  {returnGoldStr} g
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-
-        {/* Remark / Notes */}
-        {settlement.notes && (
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700">
-            <span className="font-bold text-slate-900">Remark / Notes: </span>
-            <span>{settlement.notes}</span>
-          </div>
-        )}
       </div>
 
       <EditSettlementModal

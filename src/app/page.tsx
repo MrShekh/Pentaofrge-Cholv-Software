@@ -13,11 +13,18 @@ import {
   Clock,
   IndianRupee,
   Flame,
+  Calendar,
 } from 'lucide-react';
 import { QuickTransactionModal } from '@/components/QuickTransactionModal';
 import { TransactionType } from '@prisma/client';
 
 interface DashboardData {
+  period?: {
+    range: string;
+    label: string;
+    fromDate: string | null;
+    toDate: string | null;
+  };
   metrics: {
     todayIn: string;
     todayOut: string;
@@ -28,6 +35,12 @@ interface DashboardData {
     totalDukanLoss?: string;
     todayDollLoss?: string;
     totalDollLoss?: string;
+    periodIn?: string;
+    periodOut?: string;
+    periodDukanLoss?: string;
+    periodDollLoss?: string;
+    periodMakingGold?: string;
+    periodMakingAmount?: string;
   };
   recentTransactions: Array<{
     id: string;
@@ -59,9 +72,21 @@ export default function DashboardPage() {
   const [quickTxType, setQuickTxType] = useState<TransactionType>(TransactionType.IN);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const fetchDashboard = () => {
+  // Date selection state: default to 'all_time' so full totals are shown instead of 00
+  const [selectedRange, setSelectedRange] = useState<'all_time' | 'this_month' | 'today' | 'custom'>('all_time');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+
+  const fetchDashboard = (range = selectedRange, from = fromDate, to = toDate) => {
     setIsLoading(true);
-    fetch('/api/dashboard')
+    const params = new URLSearchParams();
+    params.set('range', range);
+    if (range === 'custom') {
+      if (from) params.set('fromDate', from);
+      if (to) params.set('toDate', to);
+    }
+
+    fetch(`/api/dashboard?${params.toString()}`)
       .then(async (res) => {
         if (res.status === 401) {
           window.location.href = '/login';
@@ -84,12 +109,24 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    fetchDashboard();
+    fetchDashboard(selectedRange, fromDate, toDate);
 
-    const handleUpdate = () => fetchDashboard();
+    const handleUpdate = () => fetchDashboard(selectedRange, fromDate, toDate);
     window.addEventListener('transaction-updated', handleUpdate);
     return () => window.removeEventListener('transaction-updated', handleUpdate);
   }, []);
+
+  const handleRangeChange = (newRange: 'all_time' | 'this_month' | 'today' | 'custom') => {
+    setSelectedRange(newRange);
+    fetchDashboard(newRange, fromDate, toDate);
+  };
+
+  const handleCustomDateApply = () => {
+    if (fromDate || toDate) {
+      setSelectedRange('custom');
+      fetchDashboard('custom', fromDate, toDate);
+    }
+  };
 
   const openQuickTx = (type: TransactionType) => {
     setQuickTxType(type);
@@ -157,32 +194,135 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 5 Summary Cards: Minimal & Clean */}
+      {/* Date / Period Filter Control */}
+      <div className="bg-white p-3 sm:p-3.5 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1 flex items-center gap-1">
+            <Calendar className="w-3.5 h-3.5 text-slate-400" /> Filter:
+          </span>
+
+          <button
+            onClick={() => handleRangeChange('all_time')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              selectedRange === 'all_time'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            All Time Total
+          </button>
+
+          <button
+            onClick={() => handleRangeChange('this_month')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              selectedRange === 'this_month'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            This Month
+          </button>
+
+          <button
+            onClick={() => handleRangeChange('today')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              selectedRange === 'today'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Today
+          </button>
+
+          <button
+            onClick={() => handleRangeChange('custom')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              selectedRange === 'custom'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Custom Range
+          </button>
+        </div>
+
+        {/* Custom Date Pickers when 'custom' is active */}
+        {selectedRange === 'custom' && (
+          <div className="flex items-center gap-2 flex-wrap bg-slate-50 p-2 rounded-lg border border-slate-200">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-slate-500 font-medium">From:</span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  fetchDashboard('custom', e.target.value, toDate);
+                }}
+                className="px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-slate-500 font-medium">To:</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => {
+                  setToDate(e.target.value);
+                  fetchDashboard('custom', fromDate, e.target.value);
+                }}
+                className="px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Current Active Label */}
+        <div className="text-[11px] text-slate-500">
+          Showing: <strong className="text-slate-900 font-semibold">{data?.period?.label || 'All Time'}</strong>
+        </div>
+      </div>
+
+      {/* 5 Summary Cards: Dynamically Updated Based on Period */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-        {/* Today's IN */}
+        {/* Received (IN) */}
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 mb-1.5">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Today&apos;s Received (IN)
+              {selectedRange === 'today'
+                ? "Today's"
+                : selectedRange === 'this_month'
+                ? "This Month's"
+                : selectedRange === 'custom'
+                ? 'Period'
+                : 'Total'} Received (IN)
             </span>
             <TrendingUp className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900 font-mono tracking-tight">
-            {isLoading ? '...' : `${data?.metrics.todayIn || '0.000'} g`}
+            {isLoading ? '...' : `${data?.metrics.periodIn || data?.metrics.todayIn || '0.000'} g`}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Gold received today</p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            Gold received in {data?.period?.label?.toLowerCase() || 'period'}
+          </p>
         </div>
 
-        {/* Today's OUT */}
+        {/* Returned (OUT) */}
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 mb-1.5">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Today&apos;s Returned (OUT)
+              {selectedRange === 'today'
+                ? "Today's"
+                : selectedRange === 'this_month'
+                ? "This Month's"
+                : selectedRange === 'custom'
+                ? 'Period'
+                : 'Total'} Returned (OUT)
             </span>
             <TrendingDown className="w-4 h-4 text-rose-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900 font-mono tracking-tight">
-            {isLoading ? '...' : `${data?.metrics.todayOut || '0.000'} g`}
+            {isLoading ? '...' : `${data?.metrics.periodOut || data?.metrics.todayOut || '0.000'} g`}
           </div>
           <p className="text-[11px] text-slate-400 mt-1">Delivered &amp; settled return</p>
         </div>
@@ -202,19 +342,19 @@ export default function DashboardPage() {
               <>
                 <span title="Dukan Loss">
                   <span className="text-xs font-sans text-orange-700 font-bold mr-1">Dk:</span>
-                  {data?.metrics.todayDukanLoss || '0.000'}g
+                  {data?.metrics.periodDukanLoss || data?.metrics.todayDukanLoss || '0.000'}g
                 </span>
                 <span className="text-slate-300">|</span>
                 <span title="Doll Loss">
                   <span className="text-xs font-sans text-rose-700 font-bold mr-1">Dl:</span>
-                  {data?.metrics.todayDollLoss || '0.000'}g
+                  {data?.metrics.periodDollLoss || data?.metrics.todayDollLoss || '0.000'}g
                 </span>
               </>
             )}
           </div>
           <p className="text-[10px] text-slate-400 mt-1">
             {parseFloat(data?.metrics.totalDukanLoss || '0') > 0 || parseFloat(data?.metrics.totalDollLoss || '0') > 0
-              ? `Total: Dk ${data?.metrics.totalDukanLoss || '0'}g • Dl ${data?.metrics.totalDollLoss || '0'}g`
+              ? `All-time: Dk ${data?.metrics.totalDukanLoss || '0'}g • Dl ${data?.metrics.totalDollLoss || '0'}g`
               : 'Melting & tumbling workshop loss'}
           </p>
         </div>
@@ -233,30 +373,39 @@ export default function DashboardPage() {
           <p className="text-[11px] text-slate-400 mt-1">Total active gold with worker</p>
         </div>
 
-        {/* Today's Making Amount */}
+        {/* Making Fee Amount */}
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 mb-1.5">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Today&apos;s Making Fee
+              {selectedRange === 'today'
+                ? "Today's"
+                : selectedRange === 'this_month'
+                ? "This Month's"
+                : selectedRange === 'custom'
+                ? 'Period'
+                : 'Total'} Making Fee
             </span>
             <IndianRupee className="w-4 h-4 text-slate-400" />
           </div>
           <div className="text-2xl font-bold text-slate-900 font-mono tracking-tight">
             {isLoading ? (
               '...'
-            ) : parseFloat(data?.metrics.todayMakingGold || '0') > 0 ? (
+            ) : parseFloat(data?.metrics.periodMakingGold || data?.metrics.todayMakingGold || '0') > 0 ? (
               <span className="text-amber-800">
-                {data?.metrics.todayMakingGold} g{' '}
+                {data?.metrics.periodMakingGold || data?.metrics.todayMakingGold} g{' '}
                 <span className="text-xs font-sans text-amber-600 font-medium">(Gold)</span>
               </span>
             ) : (
-              `₹${data?.metrics.todayMakingAmount || '0.00'}`
+              `₹${parseFloat(data?.metrics.periodMakingAmount || data?.metrics.todayMakingAmount || '0').toLocaleString('en-IN', {
+                minimumFractionDigits: 2,
+              })}`
             )}
           </div>
           <p className="text-[11px] text-slate-400 mt-1">
-            {parseFloat(data?.metrics.todayMakingGold || '0') > 0 && parseFloat(data?.metrics.todayMakingAmount || '0') > 0
-              ? `+ ₹${data?.metrics.todayMakingAmount} in cash/UPI`
-              : parseFloat(data?.metrics.todayMakingGold || '0') > 0
+            {parseFloat(data?.metrics.periodMakingGold || data?.metrics.todayMakingGold || '0') > 0 &&
+            parseFloat(data?.metrics.periodMakingAmount || data?.metrics.todayMakingAmount || '0') > 0
+              ? `+ ₹${parseFloat(data?.metrics.periodMakingAmount || data?.metrics.todayMakingAmount || '0').toLocaleString('en-IN')} cash/UPI`
+              : parseFloat(data?.metrics.periodMakingGold || data?.metrics.todayMakingGold || '0') > 0
               ? 'Deducted directly in gold fee'
               : 'Charges billed / collected in ₹'}
           </p>

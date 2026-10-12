@@ -1,25 +1,68 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/auth';
 import { Decimal, toDecimal } from '@/lib/decimal';
-import { TransactionType, TransactionStatus } from '@prisma/client';
+import { TransactionType, TransactionStatus, Prisma } from '@prisma/client';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     await requireUser();
 
-    // Today's range (start of day to now in local time)
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const searchParams = req.nextUrl.searchParams;
+    const range = searchParams.get('range') || 'all_time';
+    const fromDateParam = searchParams.get('fromDate');
+    const toDateParam = searchParams.get('toDate');
+    const monthParam = searchParams.get('month');
 
-    // 1. Transactions today
-    const todayTxns = await prisma.transaction.findMany({
-      where: {
-        status: TransactionStatus.ACTIVE,
-        transactionDate: {
-          gte: startOfToday,
-        },
-      },
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
+    let periodLabel = 'All Time';
+
+    const now = new Date();
+
+    if (range === 'today') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      periodLabel = 'Today';
+    } else if (range === 'this_month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      periodLabel = now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    } else if (range === 'monthly' && monthParam) {
+      const [year, month] = monthParam.split('-').map(Number);
+      startDate = new Date(year, month - 1, 1, 0, 0, 0);
+      endDate = new Date(year, month, 0, 23, 59, 59, 999);
+      periodLabel = startDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    } else if (range === 'custom' || fromDateParam || toDateParam) {
+      if (fromDateParam) {
+        startDate = new Date(`${fromDateParam}T00:00:00`);
+      }
+      if (toDateParam) {
+        endDate = new Date(`${toDateParam}T23:59:59.999`);
+      }
+      periodLabel = `${fromDateParam || 'Start'} to ${toDateParam || 'Now'}`;
+    } else {
+      // all_time (default)
+      startDate = null;
+      endDate = null;
+      periodLabel = 'All Time';
+    }
+
+    // 1. Transactions in the selected period
+    const txWhere: Prisma.TransactionWhereInput = {
+      status: TransactionStatus.ACTIVE,
+      ...(startDate || endDate
+        ? {
+            transactionDate: {
+              ...(startDate ? { gte: startDate } : {}),
+              ...(endDate ? { lte: endDate } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const periodTxns = await prisma.transaction.findMany({
+      where: txWhere,
       select: {
         type: true,
         weight: true,
@@ -27,21 +70,21 @@ export async function GET() {
       },
     });
 
-    let todayIn = new Decimal(0);
-    let todayOut = new Decimal(0);
-    let todayDukanLoss = new Decimal(0);
-    let todayDollLoss = new Decimal(0);
+    let periodIn = new Decimal(0);
+    let periodOut = new Decimal(0);
+    let periodDukanLoss = new Decimal(0);
+    let periodDollLoss = new Decimal(0);
 
-    for (const t of todayTxns) {
+    for (const t of periodTxns) {
       const w = toDecimal(t.weight);
       if (t.type === TransactionType.IN || t.type === TransactionType.OPENING_BALANCE) {
-        todayIn = todayIn.plus(w);
+        periodIn = periodIn.plus(w);
       } else if (t.type === TransactionType.OUT || t.type === TransactionType.SETTLEMENT_RETURN) {
-        todayOut = todayOut.plus(w);
+        periodOut = periodOut.plus(w);
       } else if (t.type === TransactionType.SETTLEMENT_ADJUSTMENT && t.notes?.includes('(Dukan loss)')) {
-        todayDukanLoss = todayDukanLoss.plus(w);
+        periodDukanLoss = periodDukanLoss.plus(w);
       } else if (t.type === TransactionType.SETTLEMENT_ADJUSTMENT && t.notes?.includes('(Doll loss)')) {
-        todayDollLoss = todayDollLoss.plus(w);
+        periodDollLoss = periodDollLoss.plus(w);
       }
     }
 
@@ -110,40 +153,59 @@ export async function GET() {
     // Sort pending balances descending
     pendingBalancesList.sort((a, b) => parseFloat(b.balance) - parseFloat(a.balance));
 
-    // 3. Today's making amount collected or billed (Cash & Gold)
-    const todaySettlements = await prisma.settlement.findMany({
-      where: { settlementDate: { gte: startOfToday } },
+    // 3. Making amount collected or billed in selected period (Cash & Gold)
+    const settlementWhere: Prisma.SettlementWhereInput = {
+      ...(startDate || endDate
+        ? {
+            settlementDate: {
+              ...(startDate ? { gte: startDate } : {}),
+              ...(endDate ? { lte: endDate } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const periodSettlements = await prisma.settlement.findMany({
+      where: settlementWhere,
       select: {
         finalMakingAmount: true,
         chargeableWeight: true,
       },
     });
 
-    let todayMakingGold = new Decimal(0);
-    let todaySettlementMoney = new Decimal(0);
-    for (const s of todaySettlements) {
+    let periodMakingGold = new Decimal(0);
+    let periodSettlementMoney = new Decimal(0);
+    for (const s of periodSettlements) {
       if (toDecimal(s.finalMakingAmount).isZero() && toDecimal(s.chargeableWeight).gt(0)) {
-        todayMakingGold = todayMakingGold.plus(toDecimal(s.chargeableWeight));
+        periodMakingGold = periodMakingGold.plus(toDecimal(s.chargeableWeight));
       } else {
-        todaySettlementMoney = todaySettlementMoney.plus(toDecimal(s.finalMakingAmount));
+        periodSettlementMoney = periodSettlementMoney.plus(toDecimal(s.finalMakingAmount));
       }
     }
 
-    const todayPayments = await prisma.payment.findMany({
-      where: {
-        paymentDate: { gte: startOfToday },
-      },
+    const paymentWhere: Prisma.PaymentWhereInput = {
+      ...(startDate || endDate
+        ? {
+            paymentDate: {
+              ...(startDate ? { gte: startDate } : {}),
+              ...(endDate ? { lte: endDate } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const periodPayments = await prisma.payment.findMany({
+      where: paymentWhere,
       select: { amount: true },
     });
 
-    let todayMakingAmount = new Decimal(0);
-    for (const p of todayPayments) {
-      todayMakingAmount = todayMakingAmount.plus(toDecimal(p.amount));
+    let periodMakingAmount = new Decimal(0);
+    for (const p of periodPayments) {
+      periodMakingAmount = periodMakingAmount.plus(toDecimal(p.amount));
     }
 
-    // If no explicit payments today, check if any rupee settlements were created today
-    if (todayMakingAmount.isZero() && todaySettlementMoney.gt(0)) {
-      todayMakingAmount = todaySettlementMoney;
+    if (periodMakingAmount.isZero() && periodSettlementMoney.gt(0)) {
+      periodMakingAmount = periodSettlementMoney;
     }
 
     // 4. Recent transactions (latest 10)
@@ -157,15 +219,30 @@ export async function GET() {
     });
 
     return NextResponse.json({
+      period: {
+        range,
+        label: periodLabel,
+        fromDate: fromDateParam || (startDate ? startDate.toISOString().split('T')[0] : null),
+        toDate: toDateParam || (endDate ? endDate.toISOString().split('T')[0] : null),
+      },
       metrics: {
-        todayIn: todayIn.toFixed(3),
-        todayOut: todayOut.toFixed(3),
+        periodIn: periodIn.toFixed(3),
+        periodOut: periodOut.toFixed(3),
+        periodDukanLoss: periodDukanLoss.toFixed(3),
+        periodDollLoss: periodDollLoss.toFixed(3),
+        periodMakingGold: periodMakingGold.toFixed(3),
+        periodMakingAmount: periodMakingAmount.toFixed(2),
+
+        // Backward compatibility properties for existing UI consumers
+        todayIn: periodIn.toFixed(3),
+        todayOut: periodOut.toFixed(3),
+        todayDukanLoss: periodDukanLoss.toFixed(3),
+        todayDollLoss: periodDollLoss.toFixed(3),
+        todayMakingGold: periodMakingGold.toFixed(3),
+        todayMakingAmount: periodMakingAmount.toFixed(2),
+
         currentPendingWork: totalPendingWork.toFixed(3),
-        todayMakingAmount: todayMakingAmount.toFixed(2),
-        todayMakingGold: todayMakingGold.toFixed(3),
-        todayDukanLoss: todayDukanLoss.toFixed(3),
         totalDukanLoss: totalDukanLoss.toFixed(3),
-        todayDollLoss: todayDollLoss.toFixed(3),
         totalDollLoss: totalDollLoss.toFixed(3),
       },
       recentTransactions: recentTxns.map((t) => ({
