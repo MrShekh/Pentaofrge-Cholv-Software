@@ -42,14 +42,36 @@ interface CashEntry {
   createdAt: string;
 }
 
+interface KarigarSettlement {
+  id: string;
+  settlementNumber: string;
+  karigarId: string;
+  fromDate: string;
+  toDate: string;
+  months: number;
+  monthlySalary: string;
+  totalSalary: string;
+  totalAdvanceGiven: string;
+  difference: string;
+  settledAmount: string;
+  carriedForward: string;
+  action: 'FULL_CLEAR' | 'CARRY_FORWARD';
+  notes: string | null;
+  settledAt: string;
+  createdAt: string;
+}
+
 interface KarigarData {
   karigar: {
     id: string;
     name: string;
     phone: string;
+    salary: string;
+    joiningDate: string;
     notes: string;
     createdAt: string;
   };
+  settlements?: KarigarSettlement[];
   cashEntries: CashEntry[];
   summary: {
     totalPendingAdvance: string;
@@ -118,7 +140,24 @@ export default function KarigarDetailPage({
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [editSalary, setEditSalary] = useState('');
+  const [editJoiningDate, setEditJoiningDate] = useState('');
   const [editNotes, setEditNotes] = useState('');
+
+  // Modal: Settlement Calculation (Notebook style)
+  const [showSettlementModal, setShowSettlementModal] = useState(false);
+  const [settleFromDate, setSettleFromDate] = useState('');
+  const [settleToDate, setSettleToDate] = useState('');
+  const [settleMonths, setSettleMonths] = useState('1');
+  const [settleMonthlySalary, setSettleMonthlySalary] = useState('');
+  const [settleAction, setSettleAction] = useState<'FULL_CLEAR' | 'CARRY_FORWARD'>('FULL_CLEAR');
+  const [settleNotes, setSettleNotes] = useState('');
+  const [isSettling, setIsSettling] = useState(false);
+  const [settleError, setSettleError] = useState<string | null>(null);
+
+  // Modal: Settlement Slip
+  const [activeSettlementSlip, setActiveSettlementSlip] = useState<KarigarSettlement | null>(null);
+  const [copiedSettlementSlip, setCopiedSettlementSlip] = useState(false);
 
   // Modal: Delete Karigar
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -142,8 +181,12 @@ export default function KarigarDetailPage({
         if (d) {
           setData(d);
           setEditName(d.karigar.name);
-          setEditPhone(d.karigar.phone);
-          setEditNotes(d.karigar.notes);
+          setEditPhone(d.karigar.phone || '');
+          setEditSalary(d.karigar.salary ? parseFloat(d.karigar.salary).toString() : '0');
+          setEditJoiningDate(
+            d.karigar.joiningDate ? new Date(d.karigar.joiningDate).toISOString().slice(0, 16) : ''
+          );
+          setEditNotes(d.karigar.notes || '');
         }
       })
       .catch((err) => console.warn('Fetch karigar warning:', err))
@@ -276,19 +319,98 @@ export default function KarigarDetailPage({
         body: JSON.stringify({
           name: editName.trim(),
           phone: editPhone.trim() || null,
+          salary: editSalary ? parseFloat(editSalary) : 0,
+          joiningDate: editJoiningDate ? new Date(editJoiningDate).toISOString() : undefined,
           notes: editNotes.trim() || null,
         }),
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Failed to update karigar');
 
-      setToastMessage('Karigar details updated');
+      setToastMessage('Karigar details and salary updated');
       setShowEditModal(false);
       fetchKarigar();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to update');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const openSettlementModal = () => {
+    if (!data) return;
+
+    // Default From Date: latest settlement toDate or karigar's joiningDate
+    let fromD = data.karigar.joiningDate
+      ? new Date(data.karigar.joiningDate)
+      : new Date(data.karigar.createdAt);
+
+    if (data.settlements && data.settlements.length > 0) {
+      const latest = data.settlements[0];
+      fromD = new Date(latest.toDate);
+    }
+
+    const toD = new Date();
+    const fromIso = fromD.toISOString().slice(0, 10);
+    const toIso = toD.toISOString().slice(0, 10);
+
+    const diffDays = Math.max(1, Math.ceil(Math.abs(toD.getTime() - fromD.getTime()) / (1000 * 60 * 60 * 24)));
+    const approxMonths = Math.max(1, Math.round((diffDays / 30.4375) * 10) / 10);
+
+    setSettleFromDate(fromIso);
+    setSettleToDate(toIso);
+    setSettleMonths(approxMonths.toString());
+    setSettleMonthlySalary(data.karigar.salary ? parseFloat(data.karigar.salary).toString() : '0');
+    setSettleAction('FULL_CLEAR');
+    setSettleNotes(`Settlement calculation for ${approxMonths} month(s)`);
+    setSettleError(null);
+    setShowSettlementModal(true);
+  };
+
+  const handleSubmitSettlement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!data) return;
+
+    const monthsNum = parseFloat(settleMonths);
+    if (isNaN(monthsNum) || monthsNum <= 0) {
+      setSettleError('Please enter valid working months (e.g. 6)');
+      return;
+    }
+
+    const salaryNum = parseFloat(settleMonthlySalary);
+    if (isNaN(salaryNum) || salaryNum < 0) {
+      setSettleError('Please enter a valid monthly salary');
+      return;
+    }
+
+    setIsSettling(true);
+    setSettleError(null);
+
+    try {
+      const res = await fetch(`/api/karigars/${id}/settle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromDate: new Date(settleFromDate).toISOString(),
+          toDate: new Date(settleToDate).toISOString(),
+          months: monthsNum,
+          monthlySalary: salaryNum,
+          action: settleAction,
+          notes: settleNotes.trim() || undefined,
+        }),
+      });
+
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to settle karigar account');
+
+      setToastMessage(`Account settled successfully: ${resData.settlement.settlementNumber}`);
+      setShowSettlementModal(false);
+      setActiveSettlementSlip(resData.settlement);
+      fetchKarigar();
+    } catch (err: unknown) {
+      setSettleError(err instanceof Error ? err.message : 'Error settling account');
+    } finally {
+      setIsSettling(false);
     }
   };
 
@@ -401,6 +523,50 @@ _Thank you - ${data.business.name}_`;
     window.open(url, '_blank');
   };
 
+  const generateSettlementSlipWhatsAppText = (slip: KarigarSettlement) => {
+    if (!data) return '';
+    const diffVal = parseFloat(slip.difference);
+    const isAdvExtra = diffVal >= 0;
+    const fromStr = new Date(slip.fromDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const toStr = new Date(slip.toDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    let lines = `*━━━━━━━━━━━━━━━━━━━━━*\n`;
+    lines += `*${data.business.name.toUpperCase()}*\n`;
+    lines += `*KARIGAR VILLAGE / PERIOD SETTLEMENT*\n`;
+    lines += `*━━━━━━━━━━━━━━━━━━━━━*\n`;
+    lines += `🧾 *Settlement No*: ${slip.settlementNumber}\n`;
+    lines += `👤 *Karigar*: ${data.karigar.name}\n`;
+    if (data.karigar.phone) lines += `📞 *Phone*: ${data.karigar.phone}\n`;
+    lines += `📅 *Settled Date*: ${new Date(slip.settledAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}\n`;
+    lines += `🗓️ *Period*: ${fromStr} to ${toStr}\n`;
+    lines += `⏱️ *Duration*: ${slip.months} Month(s)\n\n`;
+
+    lines += `*─── NOTEBOOK CALCULATION ───*\n`;
+    lines += `💼 *Monthly Salary*: ₹${parseFloat(slip.monthlySalary).toLocaleString('en-IN')}\n`;
+    lines += `💵 *Total Salary Earned*: ₹${parseFloat(slip.totalSalary).toLocaleString('en-IN')} (${slip.months} mos × ₹${parseFloat(slip.monthlySalary).toLocaleString('en-IN')})\n`;
+    lines += `🪙 *Total Advance Given*: ₹${parseFloat(slip.totalAdvanceGiven).toLocaleString('en-IN')}\n`;
+    lines += `*─────────────────────*\n`;
+    lines += `📊 *DIFFERENCE*: ${isAdvExtra ? `Advance Given Exceeds Salary by ₹${diffVal.toLocaleString('en-IN')}` : `Salary Exceeds Advance by ₹${Math.abs(diffVal).toLocaleString('en-IN')}`}\n`;
+    lines += `⚖️ *SETTLEMENT ACTION*: ${
+      slip.action === 'CARRY_FORWARD'
+        ? `Carried forward extra ₹${parseFloat(slip.carriedForward).toLocaleString('en-IN')} advance to next cycle`
+        : 'Full Clear (Current Balance set to ₹0)'
+    }\n`;
+    if (slip.notes) lines += `📝 *Notes*: ${slip.notes}\n`;
+    lines += `*━━━━━━━━━━━━━━━━━━━━━*\n`;
+    lines += `_${data.business.name} | Authorized Signature_`;
+    return lines;
+  };
+
+  const handleShareSettlementSlipWhatsApp = (slip: KarigarSettlement) => {
+    const text = generateSettlementSlipWhatsAppText(slip);
+    const cleanPhone = (data?.karigar.phone || '').replace(/[^0-9]/g, '');
+    const url = cleanPhone
+      ? `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
   if (isLoading && !data) {
     return <div className="py-20 text-center text-xs text-slate-400">Loading karigar folder...</div>;
   }
@@ -503,8 +669,26 @@ _Thank you - ${data.business.name}_`;
                 WhatsApp
               </a>
             )}
-            {karigar.notes && (
-              <span className="text-slate-500">📝 {karigar.notes}</span>
+
+            {parseFloat(karigar.salary || '0') > 0 ? (
+              <span className="flex items-center gap-1 font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                <Banknote className="w-3.5 h-3.5 text-purple-600" />
+                Monthly Salary: ₹{parseFloat(karigar.salary).toLocaleString('en-IN')}/mo
+              </span>
+            ) : (
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 hover:bg-amber-100"
+              >
+                + Set Monthly Salary
+              </button>
+            )}
+
+            {karigar.joiningDate && (
+              <span className="flex items-center gap-1 text-slate-500">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                Joined {new Date(karigar.joiningDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </span>
             )}
           </div>
         </div>
@@ -520,24 +704,16 @@ _Thank you - ${data.business.name}_`;
           </button>
 
           <button
-            onClick={() => openAddEntryModal('ADVANCE', 'RECEIVED')}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
-          >
-            <Minus className="w-4 h-4 stroke-[3]" />
-            <span>− Settle Advance</span>
-          </button>
-
-          <button
-            onClick={() => openAddEntryModal('SALARY', 'GIVEN')}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
+            onClick={openSettlementModal}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
           >
             <Banknote className="w-4 h-4" />
-            <span>💼 Pay Salary</span>
+            <span>🤝 Settle Account (Notebook)</span>
           </button>
 
           <button
             onClick={() => setShowEditModal(true)}
-            title="Edit Karigar"
+            title="Edit Karigar & Salary"
             className="p-2.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl border border-slate-200 transition"
           >
             <Pencil className="w-4 h-4" />
@@ -597,17 +773,17 @@ _Thank you - ${data.business.name}_`;
           </div>
         </div>
 
-        {/* Total Salary Paid */}
+        {/* Monthly Salary */}
         <div className="bg-white rounded-2xl border border-purple-200 shadow-2xs p-5">
           <div className="flex items-center justify-between text-xs font-bold text-purple-800 uppercase tracking-wider mb-2">
-            <span>Salary Paid</span>
+            <span>Monthly Salary</span>
             <Banknote className="w-4 h-4 text-purple-600" />
           </div>
           <div className="text-2xl font-black text-purple-950 font-mono">
-            ₹{parseFloat(summary.totalSalaryPaid).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            ₹{parseFloat(karigar.salary || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </div>
           <div className="text-[11px] text-purple-700 font-medium mt-1">
-            Regular earned wages
+            Agreed monthly pay
           </div>
         </div>
       </div>
@@ -675,24 +851,14 @@ _Thank you - ${data.business.name}_`;
               Pending Advances
             </button>
             <button
-              onClick={() => { setCategoryFilter('ADVANCE'); setStatusFilter('ALL'); }}
+              onClick={() => { setCategoryFilter('ADVANCE'); setStatusFilter('SETTLED'); }}
               className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
-                categoryFilter === 'ADVANCE' && statusFilter === 'ALL'
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                categoryFilter === 'ADVANCE' && statusFilter === 'SETTLED'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
               }`}
             >
-              All Advances
-            </button>
-            <button
-              onClick={() => { setCategoryFilter('SALARY'); setStatusFilter('ALL'); }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
-                categoryFilter === 'SALARY'
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-purple-50 text-purple-800 hover:bg-purple-100'
-              }`}
-            >
-              Salary
+              Settled Advances
             </button>
           </div>
         </div>
@@ -833,19 +999,536 @@ _Thank you - ${data.business.name}_`;
         </div>
       </div>
 
+      {/* Village & Period Settlement History */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-slate-900">Settlement History (Village Khata)</h2>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                {data.settlements?.length || 0} Settled Cycles
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Permanent record of past notebook calculations, village departures &amp; zero-settlements
+            </p>
+          </div>
+
+          <button
+            onClick={openSettlementModal}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
+          >
+            <Banknote className="w-3.5 h-3.5" />
+            <span>+ Settle Account</span>
+          </button>
+        </div>
+
+        {(!data.settlements || data.settlements.length === 0) ? (
+          <div className="py-8 text-center text-xs text-slate-400">
+            No past settlements recorded yet. Click &quot;Settle Account&quot; to calculate salary vs advance and settle.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+                  <th className="py-3 px-4">Settlement #</th>
+                  <th className="py-3 px-4">Settled On</th>
+                  <th className="py-3 px-4">Work Period</th>
+                  <th className="py-3 px-4">Monthly Salary</th>
+                  <th className="py-3 px-4">Total Salary</th>
+                  <th className="py-3 px-4">Advance Given</th>
+                  <th className="py-3 px-4">Difference</th>
+                  <th className="py-3 px-4">Action Taken</th>
+                  <th className="py-3 px-4 text-right">Slip</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                {data.settlements.map((s) => {
+                  const diffVal = parseFloat(s.difference);
+                  const isAdvExtra = diffVal >= 0;
+                  return (
+                    <tr key={s.id} className="hover:bg-slate-50/80 transition">
+                      <td className="py-3 px-4 whitespace-nowrap font-mono font-bold text-indigo-900">
+                        {s.settlementNumber}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap text-slate-600">
+                        {new Date(s.settledAt).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span className="font-semibold text-slate-900">
+                          {s.months} mos
+                        </span>
+                        <div className="text-[10px] text-slate-400">
+                          {new Date(s.fromDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} – {new Date(s.toDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap font-mono">
+                        ₹{parseFloat(s.monthlySalary).toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap font-mono font-semibold text-purple-700">
+                        ₹{parseFloat(s.totalSalary).toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap font-mono font-semibold text-amber-800">
+                        ₹{parseFloat(s.totalAdvanceGiven).toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap font-mono font-bold">
+                        {isAdvExtra ? (
+                          <span className="text-amber-800">
+                            +₹{diffVal.toLocaleString('en-IN')} (Extra)
+                          </span>
+                        ) : (
+                          <span className="text-emerald-700">
+                            -₹{Math.abs(diffVal).toLocaleString('en-IN')} (Due)
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        {s.action === 'CARRY_FORWARD' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                            Carried Fwd ₹{parseFloat(s.carriedForward).toLocaleString('en-IN')}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            Khata Nil (₹0)
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setActiveSettlementSlip(s)}
+                            title="View / Print Slip"
+                            className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleShareSettlementSlipWhatsApp(s)}
+                            title="Share on WhatsApp"
+                            className="p-1.5 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition"
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Modal: Notebook Settlement Calculation */}
+      {showSettlementModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 flex flex-col max-h-[92vh]">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Banknote className="w-4 h-4 text-indigo-400" />
+                <div>
+                  <h2 className="text-sm font-bold">Settle Karigar Account: {karigar.name}</h2>
+                  <p className="text-[10px] text-slate-300">Notebook calculation: Advance Given vs Salary Earned</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSettlementModal(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitSettlement} className="p-5 overflow-y-auto space-y-4">
+              {settleError && (
+                <div className="p-2.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg">
+                  {settleError}
+                </div>
+              )}
+
+              {/* Working Period Dates */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Period From (Start Date)
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={settleFromDate}
+                    onChange={(e) => {
+                      setSettleFromDate(e.target.value);
+                      if (e.target.value && settleToDate) {
+                        const d1 = new Date(e.target.value);
+                        const d2 = new Date(settleToDate);
+                        const diffDays = Math.max(1, Math.ceil(Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)));
+                        const m = Math.max(1, Math.round((diffDays / 30.4375) * 10) / 10);
+                        setSettleMonths(m.toString());
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Period To (Settlement Date)
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={settleToDate}
+                    onChange={(e) => {
+                      setSettleToDate(e.target.value);
+                      if (settleFromDate && e.target.value) {
+                        const d1 = new Date(settleFromDate);
+                        const d2 = new Date(e.target.value);
+                        const diffDays = Math.max(1, Math.ceil(Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)));
+                        const m = Math.max(1, Math.round((diffDays / 30.4375) * 10) / 10);
+                        setSettleMonths(m.toString());
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
+                  />
+                </div>
+              </div>
+
+              {/* Working Duration & Monthly Salary */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Working Duration (Months) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    required
+                    placeholder="e.g. 6"
+                    value={settleMonths}
+                    onChange={(e) => setSettleMonths(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">e.g. 6 months worked</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Monthly Salary (₹) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 font-bold text-slate-400 text-xs">₹</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      required
+                      placeholder="e.g. 10000"
+                      value={settleMonthlySalary}
+                      onChange={(e) => setSettleMonthlySalary(e.target.value)}
+                      className="w-full pl-7 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Agreed fixed monthly pay</span>
+                </div>
+              </div>
+
+              {/* Live Notebook Calculation Box */}
+              {(() => {
+                const currentPendingAdv = parseFloat(summary.totalPendingAdvance);
+                const mNum = parseFloat(settleMonths) || 0;
+                const salNum = parseFloat(settleMonthlySalary) || 0;
+                const totSal = mNum * salNum;
+                const diff = currentPendingAdv - totSal;
+                const isExtraAdv = diff > 0;
+                const isDueToKarigar = diff < 0;
+                const absDiff = Math.abs(diff);
+
+                return (
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 font-mono">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Notebook Calculation Summary
+                    </div>
+
+                    <div className="space-y-1.5 text-xs text-slate-700">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">Total Advance Given (Pending):</span>
+                        <span className="font-bold text-amber-900">
+                          ₹{currentPendingAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">
+                          Total Salary ({mNum} mos × ₹{salNum.toLocaleString('en-IN')}):
+                        </span>
+                        <span className="font-bold text-purple-800">
+                          ₹{totSal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      <div className="border-t border-dashed border-slate-300 pt-2 flex justify-between items-center text-sm font-bold">
+                        <span>
+                          {isExtraAdv ? 'Extra Advance Taken:' : isDueToKarigar ? 'Balance Due to Karigar:' : 'Difference:'}
+                        </span>
+                        <span className={isExtraAdv ? 'text-amber-800' : isDueToKarigar ? 'text-emerald-700' : 'text-slate-900'}>
+                          ₹{absDiff.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] p-2.5 rounded-lg bg-white border border-slate-200 font-sans">
+                      {isExtraAdv ? (
+                        <span className="text-amber-800 font-medium">
+                          ⚠️ Karigar has taken <strong>₹{absDiff.toLocaleString('en-IN')}</strong> more than his {mNum} months salary.
+                        </span>
+                      ) : isDueToKarigar ? (
+                        <span className="text-emerald-800 font-medium">
+                          💼 Karigar earned <strong>₹{absDiff.toLocaleString('en-IN')}</strong> more than the advance taken.
+                        </span>
+                      ) : (
+                        <span className="text-emerald-800 font-medium">
+                          ✅ Salary and Advance match exactly (₹0 difference).
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Settlement Action Selection */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  How should this be settled? *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Option 1: Full Clear / Khata Nil */}
+                  <label
+                    className={`p-3 rounded-xl border text-xs cursor-pointer flex flex-col justify-between transition ${
+                      settleAction === 'FULL_CLEAR'
+                        ? 'border-indigo-600 bg-indigo-50/70 text-indigo-950 shadow-xs'
+                        : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <input
+                        type="radio"
+                        name="settleAction"
+                        checked={settleAction === 'FULL_CLEAR'}
+                        onChange={() => setSettleAction('FULL_CLEAR')}
+                        className="text-indigo-600"
+                      />
+                      <span className="font-bold">Full Clear (Make Balance ₹0)</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 pl-5">
+                      All unsettled advances marked settled. Karigar pending balance becomes ₹0.
+                    </p>
+                  </label>
+
+                  {/* Option 2: Carry Forward */}
+                  <label
+                    className={`p-3 rounded-xl border text-xs cursor-pointer flex flex-col justify-between transition ${
+                      settleAction === 'CARRY_FORWARD'
+                        ? 'border-indigo-600 bg-indigo-50/70 text-indigo-950 shadow-xs'
+                        : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <input
+                        type="radio"
+                        name="settleAction"
+                        checked={settleAction === 'CARRY_FORWARD'}
+                        onChange={() => setSettleAction('CARRY_FORWARD')}
+                        className="text-indigo-600"
+                      />
+                      <span className="font-bold">Carry Forward Extra Advance</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 pl-5">
+                      Settles current cycle and carries forward the extra advance to next cycle.
+                    </p>
+                  </label>
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Settlement Notes / Remarks (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Karigar going to village, settled 6 months advance"
+                  value={settleNotes}
+                  onChange={(e) => setSettleNotes(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowSettlementModal(false)}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSettling}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition shadow-xs flex items-center gap-1.5"
+                >
+                  <Banknote className="w-4 h-4" />
+                  <span>{isSettling ? 'Settling...' : 'Confirm & Settle Karigar'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Settlement Voucher Slip */}
+      {activeSettlementSlip && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-slate-200 flex flex-col">
+            <div className="p-3 bg-slate-900 text-white flex items-center justify-between">
+              <span className="text-xs font-bold">Settlement Slip #{activeSettlementSlip.settlementNumber}</span>
+              <button
+                onClick={() => setActiveSettlementSlip(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Slip content */}
+            <div id="settlement-slip" className="p-5 bg-white font-mono text-xs space-y-3">
+              <div className="text-center border-b border-dashed border-slate-300 pb-3">
+                <div className="font-bold text-sm text-slate-900 uppercase">{business.name}</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">{business.address}</div>
+                <div className="text-[10px] text-slate-500">Phone: {business.phone}</div>
+                <div className="mt-2 text-xs font-bold text-indigo-900">
+                  KARIGAR SETTLEMENT SLIP
+                </div>
+              </div>
+
+              <div className="space-y-1.5 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Settlement No:</span>
+                  <span className="font-bold text-slate-900">{activeSettlementSlip.settlementNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Settled On:</span>
+                  <span>{new Date(activeSettlementSlip.settledAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Karigar:</span>
+                  <span className="font-bold text-slate-900">{karigar.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Work Period:</span>
+                  <span>
+                    {new Date(activeSettlementSlip.fromDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} – {new Date(activeSettlementSlip.toDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Duration:</span>
+                  <span className="font-bold">{activeSettlementSlip.months} Month(s)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Monthly Salary:</span>
+                  <span>₹{parseFloat(activeSettlementSlip.monthlySalary).toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between border-t border-slate-100 pt-1">
+                  <span className="text-slate-500">Total Salary Earned:</span>
+                  <span className="font-bold text-purple-700">₹{parseFloat(activeSettlementSlip.totalSalary).toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Total Advance Given:</span>
+                  <span className="font-bold text-amber-800">₹{parseFloat(activeSettlementSlip.totalAdvanceGiven).toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between border-t border-slate-100 pt-1">
+                  <span className="text-slate-500 font-bold">Difference:</span>
+                  <span className="font-bold">
+                    {parseFloat(activeSettlementSlip.difference) >= 0
+                      ? `+₹${parseFloat(activeSettlementSlip.difference).toLocaleString('en-IN')} (Advance Extra)`
+                      : `-₹${Math.abs(parseFloat(activeSettlementSlip.difference)).toLocaleString('en-IN')} (Salary Due)`}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Action Taken:</span>
+                  <span className="font-bold text-indigo-900">
+                    {activeSettlementSlip.action === 'CARRY_FORWARD'
+                      ? `Carried Fwd ₹${parseFloat(activeSettlementSlip.carriedForward).toLocaleString('en-IN')}`
+                      : 'Full Clear (Khata Nil)'}
+                  </span>
+                </div>
+                {activeSettlementSlip.notes && (
+                  <div className="flex justify-between pt-1 text-[10px] text-slate-400">
+                    <span>Notes: {activeSettlementSlip.notes}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-b border-dashed border-slate-300 py-2.5 flex justify-between items-center text-xs font-bold">
+                <span>SETTLED AMOUNT:</span>
+                <span>₹{parseFloat(activeSettlementSlip.settledAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+
+              <div className="text-center text-[10px] text-slate-400 pt-1">
+                Authorized Signatory
+              </div>
+            </div>
+
+            {/* Slip action bar */}
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
+              <button
+                onClick={() => {
+                  const text = generateSettlementSlipWhatsAppText(activeSettlementSlip);
+                  navigator.clipboard.writeText(text);
+                  setCopiedSettlementSlip(true);
+                  setTimeout(() => setCopiedSettlementSlip(false), 2000);
+                }}
+                className="flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-semibold text-slate-700 transition"
+              >
+                {copiedSettlementSlip ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedSettlementSlip ? 'Copied' : 'Copy'}</span>
+              </button>
+
+              <button
+                onClick={() => handleShareSettlementSlipWhatsApp(activeSettlementSlip)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>WhatsApp</span>
+              </button>
+
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-1 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal: Add Cash Entry (Give Advance / Settle / Pay Salary) */}
       {showEntryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-200">
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Banknote className="w-4 h-4 text-emerald-400" />
+                <Banknote className="w-4 h-4 text-amber-400" />
                 <h2 className="text-sm font-bold">
-                  {entryCategory === 'SALARY'
-                    ? `Pay Salary to ${karigar.name}`
-                    : entryAction === 'RECEIVED'
-                    ? `Settle / Return Advance from ${karigar.name}`
-                    : `Give Advance to ${karigar.name}`}
+                  Give Advance to {karigar.name}
                 </h2>
               </div>
               <button
@@ -862,53 +1545,6 @@ _Thank you - ${data.business.name}_`;
                   {errorMessage}
                 </div>
               )}
-
-              {/* Category Radio Tabs */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Transaction Type *
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { setEntryCategory('ADVANCE'); setEntryAction('GIVEN'); }}
-                    className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition ${
-                      entryCategory === 'ADVANCE' && entryAction === 'GIVEN'
-                        ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <ArrowUpRight className="w-4 h-4 text-amber-600" />
-                    <span>Give Advance</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => { setEntryCategory('ADVANCE'); setEntryAction('RECEIVED'); }}
-                    className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition ${
-                      entryCategory === 'ADVANCE' && entryAction === 'RECEIVED'
-                        ? 'border-emerald-500 bg-emerald-50 text-emerald-900 shadow-xs'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
-                    <span>Settle Advance</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => { setEntryCategory('SALARY'); setEntryAction('GIVEN'); }}
-                    className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition ${
-                      entryCategory === 'SALARY'
-                        ? 'border-purple-500 bg-purple-50 text-purple-900 shadow-xs'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Banknote className="w-4 h-4 text-purple-600" />
-                    <span>Pay Salary</span>
-                  </button>
-                </div>
-              </div>
 
               {/* Amount */}
               <div>
@@ -981,9 +1617,9 @@ _Thank you - ${data.business.name}_`;
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition"
                 >
-                  {isSubmitting ? 'Recording...' : 'Record Voucher'}
+                  {isSubmitting ? 'Recording...' : '+ Give Advance'}
                 </button>
               </div>
             </form>
@@ -1256,14 +1892,31 @@ _Thank you - ${data.business.name}_`;
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Notes / Description</label>
-                <textarea
-                  rows={2}
-                  value={editNotes}
-                  onChange={(e) => setEditNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 resize-none"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Monthly Salary (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 font-bold text-slate-400 text-xs">₹</span>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 10000"
+                      value={editSalary}
+                      onChange={(e) => setEditSalary(e.target.value)}
+                      className="w-full pl-7 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Joining Date &amp; Time</label>
+                  <input
+                    type="datetime-local"
+                    value={editJoiningDate}
+                    onChange={(e) => setEditJoiningDate(e.target.value)}
+                    className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
+                  />
+                </div>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">

@@ -72,8 +72,8 @@ export default function DashboardPage() {
   const [quickTxType, setQuickTxType] = useState<TransactionType>(TransactionType.IN);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Date selection state: default to 'all_time' so full totals are shown instead of 00
-  const [selectedRange, setSelectedRange] = useState<'all_time' | 'this_month' | 'today' | 'custom'>('all_time');
+  // Date selection state: default to 'today' as requested by client
+  const [selectedRange, setSelectedRange] = useState<'today' | 'all_time' | 'this_month' | 'custom'>('today');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
 
@@ -202,6 +202,17 @@ export default function DashboardPage() {
           </span>
 
           <button
+            onClick={() => handleRangeChange('today')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              selectedRange === 'today'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Today
+          </button>
+
+          <button
             onClick={() => handleRangeChange('all_time')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
               selectedRange === 'all_time'
@@ -221,17 +232,6 @@ export default function DashboardPage() {
             }`}
           >
             This Month
-          </button>
-
-          <button
-            onClick={() => handleRangeChange('today')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-              selectedRange === 'today'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Today
           </button>
 
           <button

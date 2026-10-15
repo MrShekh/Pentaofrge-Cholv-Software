@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx prisma/seed.ts",
+    "seed:demo": "tsx prisma/seed-demo.ts",
     "reset-data": "tsx prisma/reset-clean.ts",
     "studio": "prisma studio"
   },

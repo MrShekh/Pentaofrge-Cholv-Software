@@ -29,6 +29,10 @@ export async function GET(req: NextRequest) {
           cashEntries: {
             orderBy: { date: 'desc' },
           },
+          settlements: {
+            orderBy: { settledAt: 'desc' },
+            take: 1,
+          },
         },
         orderBy: { name: 'asc' },
       }),
@@ -64,11 +68,15 @@ export async function GET(req: NextRequest) {
       overallSalaryPaid += salaryPaid;
 
       const lastTx = k.cashEntries[0];
+      const salaryNum = k.salary ? parseFloat(k.salary.toString()) : 0;
+      const joiningDateIso = (k.joiningDate || k.createdAt).toISOString();
 
       return {
         id: k.id,
         name: k.name,
         phone: k.phone || '',
+        salary: salaryNum.toFixed(2),
+        joiningDate: joiningDateIso,
         notes: k.notes || '',
         totalPendingAdvance: pendingAdvance.toFixed(2),
         totalAdvanceGiven: advanceGiven.toFixed(2),
@@ -76,6 +84,13 @@ export async function GET(req: NextRequest) {
         totalSalaryPaid: salaryPaid.toFixed(2),
         entriesCount: k.cashEntries.length,
         lastTransactionDate: lastTx ? lastTx.date.toISOString() : null,
+        lastSettlement: k.settlements[0]
+          ? {
+              id: k.settlements[0].id,
+              settlementNumber: k.settlements[0].settlementNumber,
+              settledAt: k.settlements[0].settledAt.toISOString(),
+            }
+          : null,
       };
     });
 
@@ -107,13 +122,18 @@ export async function POST(req: NextRequest) {
   try {
     await requireUser();
     const body = await req.json();
-    const { name, phone, notes } = body;
+    const { name, phone, notes, salary, joiningDate } = body;
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json({ error: 'Karigar name is required' }, { status: 400 });
     }
 
     const trimmedName = name.trim();
+    const parsedSalary =
+      salary !== undefined && salary !== null && !isNaN(parseFloat(salary))
+        ? parseFloat(salary)
+        : 0;
+    const parsedJoiningDate = joiningDate ? new Date(joiningDate) : new Date();
 
     const existing = await prisma.karigar.findFirst({
       where: {
@@ -129,6 +149,8 @@ export async function POST(req: NextRequest) {
           data: {
             isActive: true,
             phone: phone ? phone.trim() : existing.phone,
+            salary: parsedSalary > 0 ? parsedSalary : existing.salary,
+            joiningDate: joiningDate ? parsedJoiningDate : existing.joiningDate,
             notes: notes ? notes.trim() : existing.notes,
           },
         });
@@ -148,6 +170,8 @@ export async function POST(req: NextRequest) {
       data: {
         name: trimmedName,
         phone: phone ? phone.trim() : null,
+        salary: parsedSalary,
+        joiningDate: parsedJoiningDate,
         notes: notes ? notes.trim() : null,
       },
     });

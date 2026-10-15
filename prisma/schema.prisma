@@ -295,40 +295,70 @@ enum KarigarCashStatus {
 }
 
 model Karigar {
-  id          String        @id @default(cuid())
+  id          String              @id @default(cuid())
   name        String
   phone       String?
+  salary      Decimal?            @default(0.00) @db.Decimal(15, 2)
+  joiningDate DateTime            @default(now())
   notes       String?
-  isActive    Boolean       @default(true)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
 
   cashEntries KarigarCash[]
+  settlements KarigarSettlement[]
 
   @@index([name])
   @@index([phone])
 }
 
-model KarigarCash {
-  id           String              @id @default(cuid())
-  entryNumber  String              @unique
-  karigarId    String?
-  karigarName  String
-  phone        String?
-  category     KarigarCashCategory @default(ADVANCE)
-  amount       Decimal             @db.Decimal(15, 2)
-  date         DateTime            @default(now())
-  status       KarigarCashStatus   @default(GIVEN)
-  settledAt    DateTime?
-  notes        String?
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+model KarigarSettlement {
+  id                String   @id @default(cuid())
+  settlementNumber  String   @unique // e.g. KSET-1001
+  karigarId         String
+  fromDate          DateTime
+  toDate            DateTime
+  months            Decimal  @db.Decimal(5, 2)
+  monthlySalary     Decimal  @db.Decimal(15, 2)
+  totalSalary       Decimal  @db.Decimal(15, 2)
+  totalAdvanceGiven Decimal  @db.Decimal(15, 2)
+  difference        Decimal  @db.Decimal(15, 2) // totalAdvanceGiven - totalSalary
+  settledAmount     Decimal  @db.Decimal(15, 2)
+  carriedForward    Decimal  @default(0.00) @db.Decimal(15, 2)
+  action            String   @default("CLEAR_ZERO") // CLEAR_ZERO or CARRY_FORWARD
+  notes             String?
+  settledAt         DateTime @default(now())
+  createdAt         DateTime @default(now())
 
-  karigar      Karigar?            @relation(fields: [karigarId], references: [id], onDelete: Cascade)
+  karigar Karigar @relation(fields: [karigarId], references: [id], onDelete: Cascade)
 
   @@index([karigarId])
+  @@index([settledAt])
+}
+
+model KarigarCash {
+  id                  String              @id @default(cuid())
+  entryNumber         String              @unique
+  karigarId           String?
+  karigarSettlementId String?
+  karigarName         String
+  phone               String?
+  category            KarigarCashCategory @default(ADVANCE)
+  amount              Decimal             @db.Decimal(15, 2)
+  date                DateTime            @default(now())
+  status              KarigarCashStatus   @default(GIVEN)
+  settledAt           DateTime?
+  notes               String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  karigar             Karigar?            @relation(fields: [karigarId], references: [id], onDelete: Cascade)
+
+  @@index([karigarId])
+  @@index([karigarSettlementId])
   @@index([karigarName])
   @@index([date])
   @@index([status])
 }
+
 

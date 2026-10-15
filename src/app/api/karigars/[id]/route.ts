@@ -17,6 +17,9 @@ export async function GET(
           cashEntries: {
             orderBy: { date: 'desc' },
           },
+          settlements: {
+            orderBy: { settledAt: 'desc' },
+          },
         },
       }),
       prisma.business.findFirst(),
@@ -49,6 +52,7 @@ export async function GET(
       id: e.id,
       entryNumber: e.entryNumber,
       karigarId: e.karigarId,
+      karigarSettlementId: e.karigarSettlementId,
       karigarName: e.karigarName,
       phone: e.phone || '',
       category: e.category,
@@ -60,21 +64,45 @@ export async function GET(
       createdAt: e.createdAt.toISOString(),
     }));
 
+    const formattedSettlements = karigar.settlements.map((s) => ({
+      id: s.id,
+      settlementNumber: s.settlementNumber,
+      fromDate: s.fromDate.toISOString(),
+      toDate: s.toDate.toISOString(),
+      months: parseFloat(s.months.toString()).toFixed(1),
+      monthlySalary: parseFloat(s.monthlySalary.toString()).toFixed(2),
+      totalSalary: parseFloat(s.totalSalary.toString()).toFixed(2),
+      totalAdvanceGiven: parseFloat(s.totalAdvanceGiven.toString()).toFixed(2),
+      difference: parseFloat(s.difference.toString()).toFixed(2),
+      settledAmount: parseFloat(s.settledAmount.toString()).toFixed(2),
+      carriedForward: parseFloat(s.carriedForward.toString()).toFixed(2),
+      action: s.action,
+      notes: s.notes || '',
+      settledAt: s.settledAt.toISOString(),
+    }));
+
+    const salaryNum = karigar.salary ? parseFloat(karigar.salary.toString()) : 0;
+    const joiningDateIso = (karigar.joiningDate || karigar.createdAt).toISOString();
+
     return NextResponse.json({
       karigar: {
         id: karigar.id,
         name: karigar.name,
         phone: karigar.phone || '',
+        salary: salaryNum.toFixed(2),
+        joiningDate: joiningDateIso,
         notes: karigar.notes || '',
         createdAt: karigar.createdAt.toISOString(),
       },
       cashEntries: formattedEntries,
+      settlements: formattedSettlements,
       summary: {
         totalPendingAdvance: pendingAdvance.toFixed(2),
         totalAdvanceGiven: advanceGiven.toFixed(2),
         totalAdvanceReceived: advanceReceived.toFixed(2),
         totalSalaryPaid: salaryPaid.toFixed(2),
         entriesCount: formattedEntries.length,
+        settlementsCount: formattedSettlements.length,
       },
       business: business || {
         name: 'Penta Chool Works',
@@ -100,12 +128,18 @@ export async function PATCH(
     await requireUser();
     const { id } = await params;
     const body = await req.json();
-    const { name, phone, notes } = body;
+    const { name, phone, notes, salary, joiningDate } = body;
 
     const dataToUpdate: Record<string, unknown> = {};
     if (name !== undefined) dataToUpdate.name = name.trim();
     if (phone !== undefined) dataToUpdate.phone = phone ? phone.trim() : null;
     if (notes !== undefined) dataToUpdate.notes = notes ? notes.trim() : null;
+    if (salary !== undefined && salary !== null) {
+      dataToUpdate.salary = parseFloat(salary) || 0;
+    }
+    if (joiningDate !== undefined && joiningDate !== null) {
+      dataToUpdate.joiningDate = new Date(joiningDate);
+    }
 
     const updated = await prisma.karigar.update({
       where: { id },
@@ -125,7 +159,11 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      karigar: updated,
+      karigar: {
+        ...updated,
+        salary: updated.salary ? parseFloat(updated.salary.toString()).toFixed(2) : '0.00',
+        joiningDate: (updated.joiningDate || updated.createdAt).toISOString(),
+      },
       message: 'Karigar details updated successfully',
     });
   } catch (error: unknown) {
@@ -145,9 +183,12 @@ export async function DELETE(
     await requireUser();
     const { id } = await params;
 
-    // Delete karigar and all their cashEntries
+    // Delete karigar, settlements, and associated cashEntries
     await prisma.$transaction([
       prisma.karigarCash.deleteMany({
+        where: { karigarId: id },
+      }),
+      prisma.karigarSettlement.deleteMany({
         where: { karigarId: id },
       }),
       prisma.karigar.delete({
@@ -157,7 +198,7 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      message: 'Karigar and all associated cash records deleted successfully',
+      message: 'Karigar and all associated records deleted successfully',
     });
   } catch (error: unknown) {
     console.error('Error deleting karigar:', error);
