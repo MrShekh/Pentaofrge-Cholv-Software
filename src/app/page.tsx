@@ -284,124 +284,134 @@ export default function DashboardPage() {
       </div>
 
       {/* 5 Summary Cards: Dynamically Updated Based on Period */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2.5 sm:gap-3 xl:gap-3.5">
         {/* Received (IN) */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              {selectedRange === 'today'
-                ? "Today's"
-                : selectedRange === 'this_month'
-                ? "This Month's"
-                : selectedRange === 'custom'
-                ? 'Period'
-                : 'Total'} Received (IN)
-            </span>
-            <TrendingUp className="w-4 h-4 text-emerald-600" />
+        <div className="bg-white p-3 sm:p-3.5 xl:p-3.5 2xl:p-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-500 mb-1.5">
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">
+                {selectedRange === 'today'
+                  ? "Today's"
+                  : selectedRange === 'this_month'
+                  ? "This Month's"
+                  : selectedRange === 'custom'
+                  ? 'Period'
+                  : 'Total'} Received (IN)
+              </span>
+              <TrendingUp className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-emerald-600 shrink-0" />
+            </div>
+            <div className="text-xl sm:text-2xl xl:text-xl 2xl:text-2xl font-bold text-slate-900 font-mono tracking-tight truncate">
+              {isLoading ? '...' : `${data?.metrics.periodIn || data?.metrics.todayIn || '0.000'} g`}
+            </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900 font-mono tracking-tight">
-            {isLoading ? '...' : `${data?.metrics.periodIn || data?.metrics.todayIn || '0.000'} g`}
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">
+          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
             Gold received in {data?.period?.label?.toLowerCase() || 'period'}
           </p>
         </div>
 
         {/* Returned (OUT) */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              {selectedRange === 'today'
-                ? "Today's"
-                : selectedRange === 'this_month'
-                ? "This Month's"
-                : selectedRange === 'custom'
-                ? 'Period'
-                : 'Total'} Returned (OUT)
-            </span>
-            <TrendingDown className="w-4 h-4 text-rose-600" />
+        <div className="bg-white p-3 sm:p-3.5 xl:p-3.5 2xl:p-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-500 mb-1.5">
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">
+                {selectedRange === 'today'
+                  ? "Today's"
+                  : selectedRange === 'this_month'
+                  ? "This Month's"
+                  : selectedRange === 'custom'
+                  ? 'Period'
+                  : 'Total'} Returned (OUT)
+              </span>
+              <TrendingDown className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-rose-600 shrink-0" />
+            </div>
+            <div className="text-xl sm:text-2xl xl:text-xl 2xl:text-2xl font-bold text-slate-900 font-mono tracking-tight truncate">
+              {isLoading ? '...' : `${data?.metrics.periodOut || data?.metrics.todayOut || '0.000'} g`}
+            </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900 font-mono tracking-tight">
-            {isLoading ? '...' : `${data?.metrics.periodOut || data?.metrics.todayOut || '0.000'} g`}
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">Delivered &amp; settled return</p>
+          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">Delivered &amp; settled return</p>
         </div>
 
         {/* Dukan & Doll Loss Card */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Dukan &amp; Doll Loss
-            </span>
-            <Flame className="w-4 h-4 text-orange-500" />
+        <div className="bg-white p-3 sm:p-3.5 xl:p-3.5 2xl:p-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-500 mb-1.5">
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">
+                Dukan &amp; Doll Loss
+              </span>
+              <Flame className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-orange-500 shrink-0" />
+            </div>
+            <div className="text-sm sm:text-base xl:text-[14px] 2xl:text-lg font-bold text-slate-900 font-mono tracking-tight flex items-baseline justify-between gap-1 overflow-hidden">
+              {isLoading ? (
+                '...'
+              ) : (
+                <>
+                  <span title="Dukan Loss" className="inline-flex items-baseline shrink-0">
+                    <span className="text-[10px] xl:text-[11px] font-sans text-orange-700 font-bold mr-0.5">Dk:</span>
+                    {data?.metrics.periodDukanLoss || data?.metrics.todayDukanLoss || '0.000'}g
+                  </span>
+                  <span className="text-slate-300 font-light select-none">|</span>
+                  <span title="Doll Loss" className="inline-flex items-baseline shrink-0">
+                    <span className="text-[10px] xl:text-[11px] font-sans text-rose-700 font-bold mr-0.5">Dl:</span>
+                    {data?.metrics.periodDollLoss || data?.metrics.todayDollLoss || '0.000'}g
+                  </span>
+                </>
+              )}
+            </div>
           </div>
-          <div className="text-xl font-bold text-slate-900 font-mono tracking-tight flex items-baseline gap-2">
-            {isLoading ? (
-              '...'
-            ) : (
-              <>
-                <span title="Dukan Loss">
-                  <span className="text-xs font-sans text-orange-700 font-bold mr-1">Dk:</span>
-                  {data?.metrics.periodDukanLoss || data?.metrics.todayDukanLoss || '0.000'}g
-                </span>
-                <span className="text-slate-300">|</span>
-                <span title="Doll Loss">
-                  <span className="text-xs font-sans text-rose-700 font-bold mr-1">Dl:</span>
-                  {data?.metrics.periodDollLoss || data?.metrics.todayDollLoss || '0.000'}g
-                </span>
-              </>
-            )}
-          </div>
-          <p className="text-[10px] text-slate-400 mt-1">
+          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
             {parseFloat(data?.metrics.totalDukanLoss || '0') > 0 || parseFloat(data?.metrics.totalDollLoss || '0') > 0
               ? `All-time: Dk ${data?.metrics.totalDukanLoss || '0'}g • Dl ${data?.metrics.totalDollLoss || '0'}g`
               : 'Melting & tumbling workshop loss'}
           </p>
         </div>
 
-        {/* Current Pending Work */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Pending Work In Workshop
-            </span>
-            <Clock className="w-4 h-4 text-slate-400" />
+        {/* Workshop Stock (Pending Work) */}
+        <div className="bg-white p-3 sm:p-3.5 xl:p-3.5 2xl:p-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-500 mb-1.5">
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate" title="Workshop Gold Stock (Pending Work)">
+                Workshop Stock
+              </span>
+              <Scale className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-amber-600 shrink-0" />
+            </div>
+            <div className="text-xl sm:text-2xl xl:text-xl 2xl:text-2xl font-bold text-slate-900 font-mono tracking-tight truncate">
+              {isLoading ? '...' : `${data?.metrics.currentPendingWork || '0.000'} g`}
+            </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900 font-mono tracking-tight">
-            {isLoading ? '...' : `${data?.metrics.currentPendingWork || '0.000'} g`}
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">Total active gold with worker</p>
+          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">Total active gold in workshop</p>
         </div>
 
         {/* Making Fee Amount */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              {selectedRange === 'today'
-                ? "Today's"
-                : selectedRange === 'this_month'
-                ? "This Month's"
-                : selectedRange === 'custom'
-                ? 'Period'
-                : 'Total'} Making Fee
-            </span>
-            <IndianRupee className="w-4 h-4 text-slate-400" />
-          </div>
-          <div className="text-2xl font-bold text-slate-900 font-mono tracking-tight">
-            {isLoading ? (
-              '...'
-            ) : parseFloat(data?.metrics.periodMakingGold || data?.metrics.todayMakingGold || '0') > 0 ? (
-              <span className="text-amber-800">
-                {data?.metrics.periodMakingGold || data?.metrics.todayMakingGold} g{' '}
-                <span className="text-xs font-sans text-amber-600 font-medium">(Gold)</span>
+        <div className="bg-white p-3 sm:p-3.5 xl:p-3.5 2xl:p-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col justify-between col-span-2 sm:col-span-1 md:col-span-1">
+          <div>
+            <div className="flex items-center justify-between text-slate-500 mb-1.5">
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">
+                {selectedRange === 'today'
+                  ? "Today's"
+                  : selectedRange === 'this_month'
+                  ? "This Month's"
+                  : selectedRange === 'custom'
+                  ? 'Period'
+                  : 'Total'} Making Fee
               </span>
-            ) : (
-              `₹${parseFloat(data?.metrics.periodMakingAmount || data?.metrics.todayMakingAmount || '0').toLocaleString('en-IN', {
-                minimumFractionDigits: 2,
-              })}`
-            )}
+              <IndianRupee className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-slate-400 shrink-0" />
+            </div>
+            <div className="text-xl sm:text-2xl xl:text-xl 2xl:text-2xl font-bold text-slate-900 font-mono tracking-tight truncate">
+              {isLoading ? (
+                '...'
+              ) : parseFloat(data?.metrics.periodMakingGold || data?.metrics.todayMakingGold || '0') > 0 ? (
+                <span className="text-amber-800">
+                  {data?.metrics.periodMakingGold || data?.metrics.todayMakingGold} g{' '}
+                  <span className="text-[10px] sm:text-xs font-sans text-amber-600 font-medium">(Gold)</span>
+                </span>
+              ) : (
+                `₹${parseFloat(data?.metrics.periodMakingAmount || data?.metrics.todayMakingAmount || '0').toLocaleString('en-IN', {
+                  minimumFractionDigits: 2,
+                })}`
+              )}
+            </div>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
+          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
             {parseFloat(data?.metrics.periodMakingGold || data?.metrics.todayMakingGold || '0') > 0 &&
             parseFloat(data?.metrics.periodMakingAmount || data?.metrics.todayMakingAmount || '0') > 0
               ? `+ ₹${parseFloat(data?.metrics.periodMakingAmount || data?.metrics.todayMakingAmount || '0').toLocaleString('en-IN')} cash/UPI`

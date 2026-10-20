@@ -31,4 +31,13 @@ body {
     border: none !important;
     width: 100% !important;
   }
+  .receipt-80mm {
+    width: 74mm !important;
+    max-width: 74mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
 }
