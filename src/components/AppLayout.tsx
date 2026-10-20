@@ -36,6 +36,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         }
       })
       .catch(() => {});
+
+    // Register PWA service worker for Android Home Screen installation
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
   }, [pathname, router, isAuthPage]);
 
   const handleOpenQuickTx = (type: TransactionType) => {

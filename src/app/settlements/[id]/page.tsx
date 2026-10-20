@@ -266,13 +266,11 @@ export default function SettlementReceiptPage({
           </div>
         </div>
 
-        {/* Customer & Karat Details Strip */}
+        {/* Order Name Strip */}
         <div className="flex items-center justify-between text-xs py-1 border-b border-dashed border-slate-300 font-medium">
-          <span className="text-slate-600">
-            Customer: <strong className="text-slate-900">{settlement.customer.name}</strong>
-          </span>
-          <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
-            {settlement.karat.name}
+          <span className="text-slate-500 font-normal">Order Name:</span>
+          <span className="font-bold text-slate-900">
+            {settlement.notes || inTransactions.map((t) => t.notes).filter(Boolean).join(', ') || outTransactions.map((t) => t.notes).filter(Boolean).join(', ') || '—'}
           </span>
         </div>
 
@@ -289,6 +287,11 @@ export default function SettlementReceiptPage({
                       <div className="text-[10px] font-normal text-slate-500 font-mono mt-0.5">
                         {formatDateTime(tx.transactionDate)}
                       </div>
+                      {tx.notes && (
+                        <div className="text-[10px] font-normal text-slate-600 mt-0.5">
+                          Order: <span className="font-medium text-slate-800">{tx.notes}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="py-2 px-2.5 text-right font-mono font-bold text-sm text-slate-900 whitespace-nowrap">
                       {tx.weight} g
@@ -328,6 +331,11 @@ export default function SettlementReceiptPage({
                       <div className="text-[10px] font-normal text-slate-500 font-mono mt-0.5">
                         {formatDateTime(tx.transactionDate)}
                       </div>
+                      {tx.notes && (
+                        <div className="text-[10px] font-normal text-slate-600 mt-0.5">
+                          Order: <span className="font-medium text-slate-800">{tx.notes}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="py-2 px-2.5 text-right font-mono font-bold text-sm text-slate-800 whitespace-nowrap">
                       {tx.weight} g
