@@ -266,14 +266,6 @@ export default function SettlementReceiptPage({
           </div>
         </div>
 
-        {/* Order Name Strip */}
-        <div className="flex items-center justify-between text-xs py-1 border-b border-dashed border-slate-300 font-medium">
-          <span className="text-slate-500 font-normal">Order Name:</span>
-          <span className="font-bold text-slate-900">
-            {settlement.notes || inTransactions.map((t) => t.notes).filter(Boolean).join(', ') || outTransactions.map((t) => t.notes).filter(Boolean).join(', ') || '—'}
-          </span>
-        </div>
-
         {/* Summary Table: Receive, Total, Out, Making Charge, Return to Customer with Date & Time */}
         <div>
           <table className="w-full text-xs text-left border border-slate-300 rounded-lg overflow-hidden">
