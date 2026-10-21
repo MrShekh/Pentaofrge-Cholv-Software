@@ -114,6 +114,14 @@ export async function GET(req: NextRequest) {
     });
     const totalDollLoss = toDecimal(totalDollLossAgg._sum.weight || 0);
 
+    // All-time Galai Loss
+    const totalGalaiLossAgg = await prisma.settlement.aggregate({
+      _sum: {
+        galaiLoss: true,
+      },
+    });
+    const totalGalaiLoss = toDecimal(totalGalaiLossAgg._sum.galaiLoss || 0);
+
     // 2. Total pending work across all customer karat accounts
     const allAccounts = await prisma.customerKaratAccount.findMany({
       where: {
@@ -170,12 +178,15 @@ export async function GET(req: NextRequest) {
       select: {
         finalMakingAmount: true,
         chargeableWeight: true,
+        galaiLoss: true,
       },
     });
 
     let periodMakingGold = new Decimal(0);
     let periodSettlementMoney = new Decimal(0);
+    let periodGalaiLoss = new Decimal(0);
     for (const s of periodSettlements) {
+      periodGalaiLoss = periodGalaiLoss.plus(toDecimal(s.galaiLoss || 0));
       if (toDecimal(s.finalMakingAmount).isZero() && toDecimal(s.chargeableWeight).gt(0)) {
         periodMakingGold = periodMakingGold.plus(toDecimal(s.chargeableWeight));
       } else {
@@ -232,6 +243,7 @@ export async function GET(req: NextRequest) {
         periodDollLoss: periodDollLoss.toFixed(3),
         periodMakingGold: periodMakingGold.toFixed(3),
         periodMakingAmount: periodMakingAmount.toFixed(2),
+        periodGalaiLoss: periodGalaiLoss.toFixed(3),
 
         // Backward compatibility properties for existing UI consumers
         todayIn: periodIn.toFixed(3),
@@ -244,6 +256,7 @@ export async function GET(req: NextRequest) {
         currentPendingWork: totalPendingWork.toFixed(3),
         totalDukanLoss: totalDukanLoss.toFixed(3),
         totalDollLoss: totalDollLoss.toFixed(3),
+        totalGalaiLoss: totalGalaiLoss.toFixed(3),
       },
       recentTransactions: recentTxns.map((t) => ({
         id: t.id,

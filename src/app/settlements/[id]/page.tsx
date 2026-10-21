@@ -34,6 +34,7 @@ interface SettlementDetail {
   makingGoldWeight?: string;
   dukanLossWeight?: string;
   dollLossWeight?: string;
+  galaiLoss?: string;
   carryForwardWeight: string;
   finalRemainingBalance: string;
   makingRate: string;
@@ -285,7 +286,7 @@ export default function SettlementReceiptPage({
                         </div>
                       )}
                     </td>
-                    <td className="py-2 px-2.5 text-right font-mono font-bold text-sm text-slate-900 whitespace-nowrap">
+                    <td className="py-2 px-2.5 text-right font-mono font-bold text-sm text-emerald-600 whitespace-nowrap">
                       {tx.weight} g
                     </td>
                   </tr>
@@ -298,7 +299,7 @@ export default function SettlementReceiptPage({
                       {formatDateTime(settlement.fromDate || settlement.settlementDate)}
                     </div>
                   </td>
-                  <td className="py-2 px-2.5 text-right font-mono font-bold text-sm text-slate-900 whitespace-nowrap">
+                  <td className="py-2 px-2.5 text-right font-mono font-bold text-sm text-emerald-600 whitespace-nowrap">
                     {settlement.totalInWeight} g
                   </td>
                 </tr>
@@ -329,7 +330,7 @@ export default function SettlementReceiptPage({
                         </div>
                       )}
                     </td>
-                    <td className="py-2 px-2.5 text-right font-mono font-bold text-sm text-slate-800 whitespace-nowrap">
+                    <td className="py-2 px-2.5 text-right font-mono font-bold text-sm text-blue-600 whitespace-nowrap">
                       {tx.weight} g
                     </td>
                   </tr>
@@ -342,13 +343,13 @@ export default function SettlementReceiptPage({
                       {formatDateTime(settlement.toDate || settlement.settlementDate)}
                     </div>
                   </td>
-                  <td className="py-2 px-2.5 text-right font-mono font-bold text-sm text-slate-800 whitespace-nowrap">
+                  <td className="py-2 px-2.5 text-right font-mono font-bold text-sm text-blue-600 whitespace-nowrap">
                     {settlement.totalOutWeight} g
                   </td>
                 </tr>
               ) : null}
 
-              {/* Making Charge */}
+              {/* Making Charge (Red) */}
               <tr>
                 <td className="py-2 px-2.5 text-slate-700">
                   <div className="font-bold">Making Charge</div>
@@ -358,12 +359,24 @@ export default function SettlementReceiptPage({
                     </div>
                   )}
                 </td>
-                <td className="py-2 px-2.5 text-right font-mono font-bold text-sm text-amber-800 whitespace-nowrap">
+                <td className="py-2 px-2.5 text-right font-mono font-bold text-sm text-rose-600 whitespace-nowrap">
                   {parseFloat(settlement.finalMakingAmount) > 0 && parseFloat(settlement.chargeableWeight || '0') === 0
                     ? `₹${settlement.finalMakingAmount}`
                     : `${settlement.chargeableWeight} g`}
                 </td>
               </tr>
+
+              {/* Galai Loss (Red - manual entry, non-stock display) */}
+              {parseFloat(settlement.galaiLoss || '0') > 0 && (
+                <tr>
+                  <td className="py-2 px-2.5 text-slate-700">
+                    <div className="font-bold text-rose-700">Galai Loss</div>
+                  </td>
+                  <td className="py-2 px-2.5 text-right font-mono font-bold text-sm text-rose-600 whitespace-nowrap">
+                    {settlement.galaiLoss} g
+                  </td>
+                </tr>
+              )}
 
               {/* Return to Customer with Date & Time */}
               <tr className="bg-emerald-50/70 border-t-2 border-emerald-600 font-bold">
@@ -405,6 +418,7 @@ export default function SettlementReceiptPage({
                 makingGoldWeight: settlement.makingGoldWeight || settlement.chargeableWeight,
                 returnedGoldWeight: settlement.returnedGoldWeight,
                 carryForwardWeight: settlement.carryForwardWeight,
+                galaiLoss: settlement.galaiLoss || '0',
                 notes: settlement.notes || undefined,
               }
             : null

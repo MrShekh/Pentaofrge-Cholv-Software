@@ -41,6 +41,8 @@ interface DashboardData {
     periodDollLoss?: string;
     periodMakingGold?: string;
     periodMakingAmount?: string;
+    periodGalaiLoss?: string;
+    totalGalaiLoss?: string;
   };
   recentTransactions: Array<{
     id: string;
@@ -331,37 +333,41 @@ export default function DashboardPage() {
           <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">Delivered &amp; settled return</p>
         </div>
 
-        {/* Dukan & Doll Loss Card */}
+        {/* Dukan, Doll & Galai Loss Card */}
         <div className="bg-white p-3 sm:p-3.5 xl:p-3.5 2xl:p-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between text-slate-500 mb-1.5">
-              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">
-                Dukan &amp; Doll Loss
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate" title="Dukan, Doll & Galai Loss">
+                Loss &amp; Galai
               </span>
               <Flame className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-orange-500 shrink-0" />
             </div>
-            <div className="text-sm sm:text-base xl:text-[14px] 2xl:text-lg font-bold text-slate-900 font-mono tracking-tight flex items-baseline justify-between gap-1 overflow-hidden">
+            <div className="text-xs sm:text-sm xl:text-[12.5px] 2xl:text-sm font-bold text-slate-900 font-mono tracking-tight flex items-baseline justify-between gap-1 overflow-hidden">
               {isLoading ? (
                 '...'
               ) : (
                 <>
                   <span title="Dukan Loss" className="inline-flex items-baseline shrink-0">
-                    <span className="text-[10px] xl:text-[11px] font-sans text-orange-700 font-bold mr-0.5">Dk:</span>
+                    <span className="text-[9.5px] xl:text-[10px] font-sans text-orange-700 font-bold mr-0.5">Dk:</span>
                     {data?.metrics.periodDukanLoss || data?.metrics.todayDukanLoss || '0.000'}g
                   </span>
                   <span className="text-slate-300 font-light select-none">|</span>
                   <span title="Doll Loss" className="inline-flex items-baseline shrink-0">
-                    <span className="text-[10px] xl:text-[11px] font-sans text-rose-700 font-bold mr-0.5">Dl:</span>
+                    <span className="text-[9.5px] xl:text-[10px] font-sans text-purple-700 font-bold mr-0.5">Dl:</span>
                     {data?.metrics.periodDollLoss || data?.metrics.todayDollLoss || '0.000'}g
+                  </span>
+                  <span className="text-slate-300 font-light select-none">|</span>
+                  <span title="Galai Loss (Receipts)" className="inline-flex items-baseline shrink-0">
+                    <span className="text-[9.5px] xl:text-[10px] font-sans text-rose-600 font-bold mr-0.5">Gl:</span>
+                    <span className="text-rose-700 font-bold">{data?.metrics.periodGalaiLoss || '0.000'}g</span>
                   </span>
                 </>
               )}
             </div>
           </div>
           <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
-            {parseFloat(data?.metrics.totalDukanLoss || '0') > 0 || parseFloat(data?.metrics.totalDollLoss || '0') > 0
-              ? `All-time: Dk ${data?.metrics.totalDukanLoss || '0'}g • Dl ${data?.metrics.totalDollLoss || '0'}g`
-              : 'Melting & tumbling workshop loss'}
+            Galai: <strong className="text-rose-600 font-mono">{data?.metrics.periodGalaiLoss || '0.000'}g</strong>
+            {parseFloat(data?.metrics.totalGalaiLoss || '0') > 0 ? ` • Total: ${data?.metrics.totalGalaiLoss}g` : ''}
           </p>
         </div>
 

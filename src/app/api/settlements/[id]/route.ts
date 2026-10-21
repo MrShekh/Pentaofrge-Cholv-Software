@@ -72,6 +72,7 @@ export async function GET(
         makingGoldWeight,
         dukanLossWeight,
         dollLossWeight,
+        galaiLoss: toDecimal(settlement.galaiLoss || 0).toFixed(3),
         carryForwardWeight: toDecimal(settlement.carryForwardWeight).toFixed(3),
         finalRemainingBalance: toDecimal(settlement.finalRemainingBalance).toFixed(3),
         makingRate: toDecimal(settlement.makingRate).toFixed(2),
@@ -134,6 +135,7 @@ export async function PATCH(
       returnGoldWeight,
       makingGoldWeight,
       carryForwardWeight,
+      galaiLoss,
       notes,
       reason,
     } = body;
@@ -147,6 +149,7 @@ export async function PATCH(
       returnGoldWeight,
       makingGoldWeight,
       carryForwardWeight,
+      galaiLoss,
       notes,
       reason: reason || 'Settlement adjustments updated via edit modal',
       userId: user.userId,
@@ -160,6 +163,7 @@ export async function PATCH(
       dollLossWeight: result.dollLossWeight,
       returnGoldWeight: result.returnGoldWeight,
       makingGoldWeight: result.makingGoldWeight,
+      galaiLoss: toDecimal(result.settlement.galaiLoss || 0).toFixed(3),
       remainingBalance: result.remainingBalance,
     });
   } catch (error: unknown) {

@@ -97,6 +97,7 @@ function SettlementsContent() {
   const [returnGoldWeight, setReturnGoldWeight] = useState<string>('');
   const [dukanLossWeight, setDukanLossWeight] = useState<string>('');
   const [dollLossWeight, setDollLossWeight] = useState<string>('');
+  const [galaiLossWeight, setGalaiLossWeight] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
 
   // Making Rate Calculation State:
@@ -124,6 +125,7 @@ function SettlementsContent() {
       makingGoldWeight: s.makingGoldWeight || s.chargeableWeight,
       returnedGoldWeight: s.returnedGoldWeight,
       carryForwardWeight: s.carryForwardWeight,
+      galaiLoss: (s as any).galaiLoss || '0',
       notes: s.notes || undefined,
     });
     setEditSettlementModalOpen(true);
@@ -299,6 +301,7 @@ function SettlementsContent() {
           returnGoldWeight: parseFloat(returnGoldWeight || '0'),
           dukanLossWeight: dl,
           dollLossWeight: doll,
+          galaiLoss: parseFloat(galaiLossWeight || '0') || 0,
           makingAmountMoney: 0,
           paymentReceived: 0,
           paymentMode: 'CASH',
@@ -348,6 +351,7 @@ function SettlementsContent() {
             setReturnGoldWeight('');
             setDukanLossWeight('');
             setDollLossWeight('');
+            setGalaiLossWeight('');
             setOrderWeight('');
             setMakingRate('');
             setNotes('');
@@ -874,6 +878,26 @@ function SettlementsContent() {
                           min="0"
                           value={dollLossWeight}
                           onChange={(e) => handleDollLossChange(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-rose-200 rounded-xl text-rose-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs text-rose-400 font-bold">g</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-bold text-rose-700 flex items-center gap-1">
+                          <span>♨️</span> Galai Loss
+                        </label>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="0.001"
+                          min="0"
+                          value={galaiLossWeight}
+                          onChange={(e) => setGalaiLossWeight(e.target.value)}
+                          placeholder="0.000"
                           className="w-full px-3 py-2 bg-white border border-rose-200 rounded-xl text-rose-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20"
                         />
                         <span className="absolute right-3 top-2.5 text-xs text-rose-400 font-bold">g</span>

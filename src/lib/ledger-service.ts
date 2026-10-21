@@ -404,6 +404,7 @@ export interface SettleAccountInput {
   returnGoldWeight?: number | string | Decimal;
   dukanLossWeight?: number | string | Decimal;
   dollLossWeight?: number | string | Decimal;
+  galaiLoss?: number | string | Decimal;
   
   // MONEY settlement: gold returned to customer, making paid in ₹
   makingAmountMoney?: number | string | Decimal;
@@ -603,6 +604,7 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
         paidAmount: new Prisma.Decimal(paidAmount.toFixed(2)),
         pendingAmount: new Prisma.Decimal(pendingAmount.toFixed(2)),
         notes: input.notes,
+        galaiLoss: new Prisma.Decimal(toDecimal(input.galaiLoss || 0).toFixed(3)),
         createdById: input.createdById,
       },
     });
@@ -778,6 +780,7 @@ export interface UpdateSettlementInput {
   returnGoldWeight?: number | string | Decimal;
   makingGoldWeight?: number | string | Decimal;
   carryForwardWeight?: number | string | Decimal;
+  galaiLoss?: number | string | Decimal;
   notes?: string;
   reason?: string;
   userId: string;
@@ -994,6 +997,9 @@ export async function updateSettlement(input: UpdateSettlementInput) {
         settledWeight: new Prisma.Decimal(totalSettledGold.toFixed(3)),
         chargeableWeight: new Prisma.Decimal(finalMakingGold.toFixed(3)),
         carryForwardWeight: new Prisma.Decimal(finalCarryForward.toFixed(3)),
+        ...(input.galaiLoss !== undefined
+          ? { galaiLoss: new Prisma.Decimal(toDecimal(input.galaiLoss || 0).toFixed(3)) }
+          : {}),
         notes: updatedNotes,
       },
       include: {

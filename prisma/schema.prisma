@@ -1,7 +1,7 @@
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  directUrl = env("DATABASE_URL")
 }
 
 generator client {
@@ -206,6 +206,9 @@ model Settlement {
   settledWeight          Decimal          @default(0.000) @db.Decimal(15, 3)
   carryForwardWeight     Decimal          @default(0.000) @db.Decimal(15, 3)
   finalRemainingBalance  Decimal          @default(0.000) @db.Decimal(15, 3)
+
+  // Galai loss (manual entry for receipt display and dashboard tracking, non-stock affecting)
+  galaiLoss              Decimal          @default(0.000) @db.Decimal(15, 3)
 
   // Making charges
   makingRate             Decimal          @default(0.00) @db.Decimal(15, 2)

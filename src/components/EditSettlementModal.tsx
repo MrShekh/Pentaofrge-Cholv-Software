@@ -14,6 +14,7 @@ export interface SettlementEditData {
   makingGoldWeight?: string;
   returnedGoldWeight?: string;
   carryForwardWeight?: string;
+  galaiLoss?: string;
   notes?: string;
 }
 
@@ -27,6 +28,7 @@ interface EditSettlementModalProps {
     dollLossWeight: string;
     returnGoldWeight: string;
     makingGoldWeight: string;
+    galaiLoss?: string;
     remainingBalance: string;
   }) => void;
 }
@@ -41,6 +43,7 @@ export function EditSettlementModal({
   const [dollLoss, setDollLoss] = useState('');
   const [makingGold, setMakingGold] = useState('');
   const [returnGold, setReturnGold] = useState('');
+  const [galaiLoss, setGalaiLoss] = useState('');
   const [reason, setReason] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -53,6 +56,7 @@ export function EditSettlementModal({
       setDollLoss(settlement.dollLossWeight || '0');
       setMakingGold(settlement.makingGoldWeight || '0');
       setReturnGold(settlement.returnedGoldWeight || '0');
+      setGalaiLoss(settlement.galaiLoss || '0');
       setNotes(settlement.notes || '');
       setReason('');
       setErrorMessage(null);
@@ -65,6 +69,7 @@ export function EditSettlementModal({
   const numDoll = parseFloat(dollLoss) || 0;
   const numMaking = parseFloat(makingGold) || 0;
   const numReturn = parseFloat(returnGold) || 0;
+  const numGalai = parseFloat(galaiLoss) || 0;
   const totalSettledNow = (numDukan + numDoll + numMaking + numReturn).toFixed(3);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -81,8 +86,9 @@ export function EditSettlementModal({
           dollLossWeight: numDoll,
           makingGoldWeight: numMaking,
           returnGoldWeight: numReturn,
+          galaiLoss: numGalai,
           notes: notes.trim() || undefined,
-          reason: reason.trim() || `Corrected settlement weights (Dukan: ${numDukan.toFixed(3)}g)`,
+          reason: reason.trim() || `Corrected settlement weights (Dukan: ${numDukan.toFixed(3)}g, Galai: ${numGalai.toFixed(3)}g)`,
         }),
       });
 
@@ -185,6 +191,26 @@ export function EditSettlementModal({
                 <span className="absolute right-2.5 top-1.5 text-xs text-slate-400 font-mono">g</span>
               </div>
               <p className="text-[10px] text-slate-400 mt-1">ढोल नुकसान</p>
+            </div>
+
+            {/* Galai Loss */}
+            <div className="bg-rose-50/50 p-3 rounded-xl border border-rose-200">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-rose-800 mb-1">
+                🔥 Galai Loss (g)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  value={galaiLoss}
+                  onChange={(e) => setGalaiLoss(e.target.value)}
+                  placeholder="0.000"
+                  className="w-full px-3 py-1.5 bg-white border border-rose-300 rounded-lg text-rose-900 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600"
+                />
+                <span className="absolute right-2.5 top-1.5 text-xs text-rose-400 font-mono">g</span>
+              </div>
+              <p className="text-[10px] text-rose-600 mt-1">Manual entry for receipt display &amp; dashboard</p>
             </div>
 
             {/* Making Charge Gold */}
