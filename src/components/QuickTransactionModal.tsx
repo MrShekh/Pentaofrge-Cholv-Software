@@ -135,6 +135,11 @@ export function QuickTransactionModal({
           } else {
             setCurrentBalance(0);
           }
+
+          // If doing an OUT entry and customer has pending Big Machine balance but no Hand balance (or more Big balance), auto-select BIG machine
+          if (type === TransactionType.OUT && data.summary?.suggestedMachine) {
+            setMachineType(data.summary.suggestedMachine);
+          }
         })
         .catch((err) => {
           console.error('Error fetching balance:', err);

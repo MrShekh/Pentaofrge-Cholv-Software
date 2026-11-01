@@ -68,6 +68,7 @@ function SettlementsContent() {
 
   const preCustomerId = searchParams.get('customerId') || '';
   const preKaratId = searchParams.get('karatId') || '';
+  const preMachine = searchParams.get('machine') === 'BIG' ? 'BIG' : 'HAND';
 
   const [settlements, setSettlements] = useState<SettlementItem[]>([]);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
@@ -78,7 +79,7 @@ function SettlementsContent() {
   const [showNewModal, setShowNewModal] = useState(Boolean(preCustomerId));
   const [selectedCustomerId, setSelectedCustomerId] = useState(preCustomerId);
   const [selectedKaratId, setSelectedKaratId] = useState(preKaratId);
-  const [machineType, setMachineType] = useState<'HAND' | 'BIG'>('HAND');
+  const [machineType, setMachineType] = useState<'HAND' | 'BIG'>(preMachine);
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -249,6 +250,11 @@ function SettlementsContent() {
             setDukanLossWeight('');
             setDollLossWeight('');
             setOrderWeight('');
+
+            // If current machine has 0 balance but the other has active balance, auto-switch machine
+            if (bal === 0 && d.summary.suggestedMachine && d.summary.suggestedMachine !== machineType) {
+              setMachineType(d.summary.suggestedMachine);
+            }
           }
         })
         .catch(console.error);

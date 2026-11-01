@@ -175,7 +175,7 @@ export function DashboardView({ machine = 'HAND' }: { machine?: 'HAND' | 'BIG' }
           </button>
 
           <Link
-            href="/settlements"
+            href={isBig ? "/settlements?machine=BIG" : "/settlements?machine=HAND"}
             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold shadow-xs transition"
           >
             <Scale className="w-3.5 h-3.5 text-slate-500" />
@@ -615,3 +615,4 @@ export function DashboardView({ machine = 'HAND' }: { machine?: 'HAND' | 'BIG' }
     </div>
   );
 }
+

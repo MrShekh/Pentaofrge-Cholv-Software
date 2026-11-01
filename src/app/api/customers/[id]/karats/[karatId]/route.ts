@@ -14,10 +14,36 @@ export async function GET(
     const machineParam = req.nextUrl.searchParams.get('machine');
     const machineFilter = machineParam === 'BIG' || machineParam === 'HAND' ? machineParam : null;
 
-    const [customer, karat] = await Promise.all([
+    const [customer, karat, allActiveTxns] = await Promise.all([
       prisma.customer.findUniqueOrThrow({ where: { id: customerId } }),
       prisma.karat.findUniqueOrThrow({ where: { id: karatId } }),
+      prisma.transaction.findMany({
+        where: {
+          customerId,
+          karatId,
+          status: TransactionStatus.ACTIVE,
+          settlementId: null,
+        },
+        select: { machineType: true, type: true, weight: true },
+      }),
     ]);
+
+    let activeBigWeight = new Decimal(0);
+    let activeHandWeight = new Decimal(0);
+    for (const at of allActiveTxns) {
+      const w = toDecimal(at.weight);
+      const isAdd = at.type === TransactionType.IN || at.type === TransactionType.OPENING_BALANCE;
+      if (at.machineType === 'BIG') {
+        activeBigWeight = isAdd ? activeBigWeight.plus(w) : activeBigWeight.minus(w);
+      } else {
+        activeHandWeight = isAdd ? activeHandWeight.plus(w) : activeHandWeight.minus(w);
+      }
+    }
+    const suggestedMachine: 'BIG' | 'HAND' = activeBigWeight.gt(0) && activeHandWeight.lte(0)
+      ? 'BIG'
+      : activeBigWeight.gt(activeHandWeight)
+      ? 'BIG'
+      : 'HAND';
 
     // Fetch all transactions for this account
     const transactions = await prisma.transaction.findMany({
@@ -254,6 +280,9 @@ export async function GET(
         totalTransactions: transactions.length,
         activeCount: activeEntries.length,
         settledCount: settledEntries.length,
+        suggestedMachine,
+        activeBigBalance: activeBigWeight.toFixed(3),
+        activeHandBalance: activeHandWeight.toFixed(3),
       },
       activeLedger: activeReversed,
       settledLedger: settledReversed,
