@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/auth';
 import { createLedgerTransaction, getAccountLedgerSummary } from '@/lib/ledger-service';
-import { TransactionType, TransactionStatus, Prisma } from '@prisma/client';
+import { TransactionType, TransactionStatus, Prisma, MachineType } from '@prisma/client';
 import { toDecimal } from '@/lib/decimal';
 
 export async function GET(req: NextRequest) {
@@ -115,6 +115,7 @@ export async function POST(req: NextRequest) {
       description,
       allowOverride,
       overrideReason,
+      machineType,
     } = body;
 
     if (!customerId || !karatId || !type || weight === undefined) {
@@ -136,6 +137,7 @@ export async function POST(req: NextRequest) {
       customerId,
       karatId,
       type: type as TransactionType,
+      machineType: machineType === 'BIG' ? MachineType.BIG : MachineType.HAND,
       weight: numWeight,
       transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
       notes: notes?.trim() || null,

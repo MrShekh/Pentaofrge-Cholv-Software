@@ -122,6 +122,47 @@ export async function GET(req: NextRequest) {
     });
     const totalGalaiLoss = toDecimal(totalGalaiLossAgg._sum.galaiLoss || 0);
 
+    // Big machine (Boro) metrics: same logic as the main stock, filtered to BIG orders
+    const bigPeriodTxns = await prisma.transaction.findMany({
+      where: { ...txWhere, machineType: 'BIG' },
+      select: { type: true, weight: true },
+    });
+    let bigPeriodIn = new Decimal(0);
+    let bigPeriodOut = new Decimal(0);
+    for (const t of bigPeriodTxns) {
+      const w = toDecimal(t.weight);
+      if (t.type === TransactionType.IN || t.type === TransactionType.OPENING_BALANCE) {
+        bigPeriodIn = bigPeriodIn.plus(w);
+      } else if (t.type === TransactionType.OUT || t.type === TransactionType.SETTLEMENT_RETURN) {
+        bigPeriodOut = bigPeriodOut.plus(w);
+      }
+    }
+
+    const bigOpenTxns = await prisma.transaction.findMany({
+      where: {
+        status: TransactionStatus.ACTIVE,
+        settlementId: null,
+        machineType: 'BIG',
+        customer: { isActive: true },
+      },
+      select: { customerId: true, karatId: true, type: true, weight: true },
+    });
+    const bigBalances = new Map<string, Decimal>();
+    for (const t of bigOpenTxns) {
+      const key = `${t.customerId}|${t.karatId}`;
+      const w = toDecimal(t.weight);
+      const cur = bigBalances.get(key) || new Decimal(0);
+      if (t.type === TransactionType.IN || t.type === TransactionType.OPENING_BALANCE) {
+        bigBalances.set(key, cur.plus(w));
+      } else {
+        bigBalances.set(key, cur.minus(w));
+      }
+    }
+    let bigPendingWork = new Decimal(0);
+    for (const bal of bigBalances.values()) {
+      if (bal.gt(0)) bigPendingWork = bigPendingWork.plus(bal);
+    }
+
     // 2. Total pending work across all customer karat accounts
     const allAccounts = await prisma.customerKaratAccount.findMany({
       where: {
@@ -257,6 +298,9 @@ export async function GET(req: NextRequest) {
         totalDukanLoss: totalDukanLoss.toFixed(3),
         totalDollLoss: totalDollLoss.toFixed(3),
         totalGalaiLoss: totalGalaiLoss.toFixed(3),
+        bigPeriodIn: bigPeriodIn.toFixed(3),
+        bigPeriodOut: bigPeriodOut.toFixed(3),
+        bigPendingWork: bigPendingWork.toFixed(3),
       },
       recentTransactions: recentTxns.map((t) => ({
         id: t.id,

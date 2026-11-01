@@ -7,6 +7,7 @@ import {
   PaymentStatus,
   Role,
   Prisma,
+  MachineType,
 } from '@prisma/client';
 import { Decimal, toDecimal, addWeights, subtractWeights, multiplyWeightByRate } from './decimal';
 import { logAudit } from './audit';
@@ -219,6 +220,7 @@ export interface CreateTransactionInput {
   allowOverride?: boolean;
   overrideReason?: string;
   userRole?: Role;
+  machineType?: MachineType;
 }
 
 /**
@@ -274,6 +276,7 @@ export async function createLedgerTransaction(input: CreateTransactionInput) {
         karatId: input.karatId,
         accountId: account.id,
         type: input.type,
+        machineType: input.machineType || MachineType.HAND,
         weight: new Prisma.Decimal(weight.toFixed(3)),
         transactionDate: input.transactionDate || new Date(),
         notes: input.notes,
@@ -458,6 +461,17 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
       },
     });
 
+    // Machine type of this settlement: derived from the orders being settled (BIG if big-machine gold dominates)
+    let bigIn = new Decimal(0);
+    let handIn = new Decimal(0);
+    for (const t of txns) {
+      if (t.type === TransactionType.IN || t.type === TransactionType.OPENING_BALANCE) {
+        if (t.machineType === MachineType.BIG) bigIn = bigIn.plus(toDecimal(t.weight));
+        else handIn = handIn.plus(toDecimal(t.weight));
+      }
+    }
+    const settlementMachine: MachineType = bigIn.gt(handIn) ? MachineType.BIG : MachineType.HAND;
+
     let totalIn = new Decimal(0);
     let totalOut = new Decimal(0);
 
@@ -589,6 +603,7 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
         totalInWeight: new Prisma.Decimal(totalIn.toFixed(3)),
         totalOutWeight: new Prisma.Decimal(totalOut.toFixed(3)),
         remainingBefore: new Prisma.Decimal(loss.toFixed(3)),
+        machineType: settlementMachine,
         settlementAction: finalAction,
         settledWeight: new Prisma.Decimal(totalSettledGold.toFixed(3)),
         carryForwardWeight: new Prisma.Decimal(carryForwardWeight.toFixed(3)),
@@ -637,6 +652,7 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
           karatId: input.karatId,
           accountId: account.id,
           type: TransactionType.SETTLEMENT_RETURN,
+          machineType: settlement.machineType,
           weight: new Prisma.Decimal(settledGoldToReturn.toFixed(3)),
           transactionDate: new Date(),
           notes: `Settlement: ${settlementNumber} (Gold returned to customer)`,
@@ -656,6 +672,7 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
           karatId: input.karatId,
           accountId: account.id,
           type: TransactionType.SETTLEMENT_ADJUSTMENT,
+          machineType: settlement.machineType,
           weight: new Prisma.Decimal(makingGoldDeducted.toFixed(3)),
           transactionDate: new Date(),
           notes: `Settlement: ${settlementNumber} (Making charge deducted in gold)`,
@@ -675,6 +692,7 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
           karatId: input.karatId,
           accountId: account.id,
           type: TransactionType.SETTLEMENT_ADJUSTMENT,
+          machineType: settlement.machineType,
           weight: new Prisma.Decimal(dukanLossWeight.toFixed(3)),
           transactionDate: new Date(),
           notes: `Settlement: ${settlementNumber} (Dukan loss)`,
@@ -694,6 +712,7 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
           karatId: input.karatId,
           accountId: account.id,
           type: TransactionType.SETTLEMENT_ADJUSTMENT,
+          machineType: settlement.machineType,
           weight: new Prisma.Decimal(dollLossWeight.toFixed(3)),
           transactionDate: new Date(),
           notes: `Settlement: ${settlementNumber} (Doll loss)`,
@@ -713,6 +732,7 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
           karatId: input.karatId,
           accountId: account.id,
           type: TransactionType.OPENING_BALANCE,
+          machineType: settlement.machineType,
           weight: new Prisma.Decimal(carryForwardWeight.toFixed(3)),
           transactionDate: new Date(),
           notes: `Opening balance carried forward from ${settlementNumber}`,
@@ -842,6 +862,7 @@ export async function updateSettlement(input: UpdateSettlementInput) {
             karatId: settlement.karatId,
             accountId: account.id,
             type: TransactionType.SETTLEMENT_ADJUSTMENT,
+            machineType: settlement.machineType,
             weight: new Prisma.Decimal(finalDukanLoss.toFixed(3)),
             transactionDate: settlement.settlementDate,
             notes: `Settlement: ${settlement.settlementNumber} (Dukan loss)`,
@@ -874,6 +895,7 @@ export async function updateSettlement(input: UpdateSettlementInput) {
             karatId: settlement.karatId,
             accountId: account.id,
             type: TransactionType.SETTLEMENT_ADJUSTMENT,
+            machineType: settlement.machineType,
             weight: new Prisma.Decimal(finalDollLoss.toFixed(3)),
             transactionDate: settlement.settlementDate,
             notes: `Settlement: ${settlement.settlementNumber} (Doll loss)`,
@@ -906,6 +928,7 @@ export async function updateSettlement(input: UpdateSettlementInput) {
             karatId: settlement.karatId,
             accountId: account.id,
             type: TransactionType.SETTLEMENT_RETURN,
+            machineType: settlement.machineType,
             weight: new Prisma.Decimal(finalReturnGold.toFixed(3)),
             transactionDate: settlement.settlementDate,
             notes: `Settlement: ${settlement.settlementNumber} (Gold returned to customer)`,
@@ -938,6 +961,7 @@ export async function updateSettlement(input: UpdateSettlementInput) {
             karatId: settlement.karatId,
             accountId: account.id,
             type: TransactionType.SETTLEMENT_ADJUSTMENT,
+            machineType: settlement.machineType,
             weight: new Prisma.Decimal(finalMakingGold.toFixed(3)),
             transactionDate: settlement.settlementDate,
             notes: `Settlement: ${settlement.settlementNumber} (Making charge deducted in gold)`,
@@ -970,6 +994,7 @@ export async function updateSettlement(input: UpdateSettlementInput) {
             karatId: settlement.karatId,
             accountId: account.id,
             type: TransactionType.OPENING_BALANCE,
+            machineType: settlement.machineType,
             weight: new Prisma.Decimal(finalCarryForward.toFixed(3)),
             transactionDate: settlement.settlementDate,
             notes: `Opening balance carried forward from ${settlement.settlementNumber}`,

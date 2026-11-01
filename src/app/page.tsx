@@ -43,6 +43,9 @@ interface DashboardData {
     periodMakingAmount?: string;
     periodGalaiLoss?: string;
     totalGalaiLoss?: string;
+    bigPeriodIn?: string;
+    bigPeriodOut?: string;
+    bigPendingWork?: string;
   };
   recentTransactions: Array<{
     id: string;
@@ -425,6 +428,28 @@ export default function DashboardPage() {
               ? 'Deducted directly in gold fee'
               : 'Charges billed / collected in ₹'}
           </p>
+        </div>
+      </div>
+
+      {/* Big Machine (Boro) Section */}
+      <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-3 sm:p-3.5">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Big Machine (Boro)</h2>
+          <span className="text-[11px] text-slate-400">{data?.period?.label || 'All Time'}</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2.5">
+          <div>
+            <div className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">Received (IN)</div>
+            <div className="text-lg sm:text-xl font-bold text-slate-900 font-mono truncate">{isLoading ? '...' : `${data?.metrics.bigPeriodIn || '0.000'} g`}</div>
+          </div>
+          <div>
+            <div className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">Returned (OUT)</div>
+            <div className="text-lg sm:text-xl font-bold text-slate-900 font-mono truncate">{isLoading ? '...' : `${data?.metrics.bigPeriodOut || '0.000'} g`}</div>
+          </div>
+          <div>
+            <div className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">Stock (Pending)</div>
+            <div className="text-lg sm:text-xl font-bold text-amber-800 font-mono truncate">{isLoading ? '...' : `${data?.metrics.bigPendingWork || '0.000'} g`}</div>
+          </div>
         </div>
       </div>
 

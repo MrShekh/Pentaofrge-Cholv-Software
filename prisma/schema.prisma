@@ -22,6 +22,11 @@ enum TransactionType {
   CORRECTION
 }
 
+enum MachineType {
+  HAND
+  BIG
+}
+
 enum TransactionStatus {
   ACTIVE
   VOID
@@ -162,6 +167,7 @@ model Transaction {
   notes             String?
   settlementId      String?
   status            TransactionStatus @default(ACTIVE)
+  machineType       MachineType       @default(HAND)
   
   // Override tracking
   overrideAllowed   Boolean           @default(false)
@@ -187,6 +193,7 @@ model Transaction {
   @@index([transactionDate])
   @@index([status])
   @@index([type])
+  @@index([machineType])
 }
 
 model Settlement {
@@ -197,6 +204,7 @@ model Settlement {
   fromDate               DateTime
   toDate                 DateTime
   settlementDate         DateTime         @default(now())
+  machineType            MachineType      @default(HAND)
   
   // Gold quantities
   totalInWeight          Decimal          @db.Decimal(15, 3)

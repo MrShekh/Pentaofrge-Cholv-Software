@@ -54,6 +54,7 @@ export function QuickTransactionModal({
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   });
   const [notes, setNotes] = useState<string>('');
+  const [machineType, setMachineType] = useState<'HAND' | 'BIG'>('HAND');
 
   // Balance checking
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
@@ -100,6 +101,7 @@ export function QuickTransactionModal({
       setType(initialType || TransactionType.IN);
       setWeight('');
       setNotes('');
+      setMachineType('HAND');
       setShowConfirmation(false);
       setErrorMessage(null);
       setAllowOverride(false);
@@ -210,6 +212,7 @@ export function QuickTransactionModal({
           weight: numWeight,
           transactionDate: fullDate.toISOString(),
           notes,
+          machineType,
           allowOverride,
           overrideReason,
         }),
@@ -301,6 +304,29 @@ export function QuickTransactionModal({
               >
                 − OUT (Finished Return)
               </button>
+            </div>
+
+            {/* Machine Type */}
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                Machine *
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {(['HAND', 'BIG'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMachineType(m)}
+                    className={`py-2.5 rounded-lg text-sm font-semibold border transition ${
+                      machineType === m
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    {m === 'HAND' ? 'Hand Machine' : 'Big Machine (Boro)'}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Customer Searchable Dropdown */}
