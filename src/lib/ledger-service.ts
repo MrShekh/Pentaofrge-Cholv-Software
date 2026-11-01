@@ -408,6 +408,7 @@ export interface SettleAccountInput {
   dukanLossWeight?: number | string | Decimal;
   dollLossWeight?: number | string | Decimal;
   galaiLoss?: number | string | Decimal;
+  machineType?: MachineType;
   
   // MONEY settlement: gold returned to customer, making paid in ₹
   makingAmountMoney?: number | string | Decimal;
@@ -455,6 +456,7 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
         karatId: input.karatId,
         status: TransactionStatus.ACTIVE,
         settlementId: null,
+        ...(input.machineType ? { machineType: input.machineType } : {}),
         transactionDate: {
           lte: toDate,
         },
@@ -470,7 +472,7 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
         else handIn = handIn.plus(toDecimal(t.weight));
       }
     }
-    const settlementMachine: MachineType = bigIn.gt(handIn) ? MachineType.BIG : MachineType.HAND;
+    const settlementMachine: MachineType = input.machineType ? input.machineType : bigIn.gt(handIn) ? MachineType.BIG : MachineType.HAND;
 
     let totalIn = new Decimal(0);
     let totalOut = new Decimal(0);
@@ -631,6 +633,7 @@ export async function settleCustomerAccount(input: SettleAccountInput) {
         karatId: input.karatId,
         status: TransactionStatus.ACTIVE,
         settlementId: null,
+        ...(input.machineType ? { machineType: input.machineType } : {}),
         transactionDate: {
           lte: toDate,
         },

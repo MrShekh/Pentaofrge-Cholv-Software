@@ -11,6 +11,8 @@ export async function GET(
   try {
     await requireUser();
     const { id: customerId, karatId } = await params;
+    const machineParam = req.nextUrl.searchParams.get('machine');
+    const machineFilter = machineParam === 'BIG' || machineParam === 'HAND' ? machineParam : null;
 
     const [customer, karat] = await Promise.all([
       prisma.customer.findUniqueOrThrow({ where: { id: customerId } }),
@@ -22,6 +24,7 @@ export async function GET(
       where: {
         customerId,
         karatId,
+        ...(machineFilter ? { machineType: machineFilter } : {}),
       },
       orderBy: { transactionDate: 'asc' },
       include: {

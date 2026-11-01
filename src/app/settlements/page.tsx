@@ -78,6 +78,7 @@ function SettlementsContent() {
   const [showNewModal, setShowNewModal] = useState(Boolean(preCustomerId));
   const [selectedCustomerId, setSelectedCustomerId] = useState(preCustomerId);
   const [selectedKaratId, setSelectedKaratId] = useState(preKaratId);
+  const [machineType, setMachineType] = useState<'HAND' | 'BIG'>('HAND');
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -230,7 +231,7 @@ function SettlementsContent() {
   // Fetch ledger summary for selected customer & karat
   useEffect(() => {
     if (selectedCustomerId && selectedKaratId) {
-      fetch(`/api/customers/${selectedCustomerId}/karats/${selectedKaratId}`)
+      fetch(`/api/customers/${selectedCustomerId}/karats/${selectedKaratId}?machine=${machineType}`)
         .then((res) => res.json())
         .then((d) => {
           if (d.summary) {
@@ -254,7 +255,7 @@ function SettlementsContent() {
     } else {
       setAccountSummary(null);
     }
-  }, [selectedCustomerId, selectedKaratId]);
+  }, [selectedCustomerId, selectedKaratId, machineType]);
 
   const handleSubmitSettlement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -296,6 +297,7 @@ function SettlementsContent() {
         body: JSON.stringify({
           customerId: selectedCustomerId,
           karatId: selectedKaratId,
+          machineType,
           settleMode: 'GOLD',
           makingGoldWeight: parseFloat(makingGoldWeight || '0'),
           returnGoldWeight: parseFloat(returnGoldWeight || '0'),
@@ -626,6 +628,28 @@ function SettlementsContent() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Machine *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['HAND', 'BIG'] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setMachineType(m)}
+                        className={`py-2 rounded-xl text-xs font-semibold border transition ${
+                          machineType === m
+                            ? 'bg-slate-900 text-white border-slate-900'
+                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        {m === 'HAND' ? 'Hand Machine' : 'Big Machine'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div>
