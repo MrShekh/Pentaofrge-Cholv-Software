@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/auth';
 import { Decimal, toDecimal } from '@/lib/decimal';
-import { TransactionType, TransactionStatus, Prisma } from '@prisma/client';
+import { TransactionType, TransactionStatus, Prisma, MachineType } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,6 +13,8 @@ export async function GET(req: NextRequest) {
     const fromDateParam = searchParams.get('fromDate');
     const toDateParam = searchParams.get('toDate');
     const monthParam = searchParams.get('month');
+    // Hand machine and Big (Boro) machine are fully separate sections
+    const machine: MachineType = searchParams.get('machine') === 'BIG' ? MachineType.BIG : MachineType.HAND;
 
     let startDate: Date | null = null;
     let endDate: Date | null = null;
@@ -51,6 +53,7 @@ export async function GET(req: NextRequest) {
     // 1. Transactions in the selected period
     const txWhere: Prisma.TransactionWhereInput = {
       status: TransactionStatus.ACTIVE,
+      machineType: machine,
       ...(startDate || endDate
         ? {
             transactionDate: {
@@ -92,6 +95,7 @@ export async function GET(req: NextRequest) {
     const totalDukanLossAgg = await prisma.transaction.aggregate({
       where: {
         status: TransactionStatus.ACTIVE,
+        machineType: machine,
         type: TransactionType.SETTLEMENT_ADJUSTMENT,
         notes: { contains: '(Dukan loss)' },
       },
@@ -105,6 +109,7 @@ export async function GET(req: NextRequest) {
     const totalDollLossAgg = await prisma.transaction.aggregate({
       where: {
         status: TransactionStatus.ACTIVE,
+        machineType: machine,
         type: TransactionType.SETTLEMENT_ADJUSTMENT,
         notes: { contains: '(Doll loss)' },
       },
@@ -116,63 +121,53 @@ export async function GET(req: NextRequest) {
 
     // All-time Galai Loss
     const totalGalaiLossAgg = await prisma.settlement.aggregate({
+      where: { machineType: machine },
       _sum: {
         galaiLoss: true,
       },
     });
     const totalGalaiLoss = toDecimal(totalGalaiLossAgg._sum.galaiLoss || 0);
 
-    // Big machine (Boro) metrics: same logic as the main stock, filtered to BIG orders
-    const bigPeriodTxns = await prisma.transaction.findMany({
-      where: { ...txWhere, machineType: 'BIG' },
-      select: { type: true, weight: true },
-    });
-    let bigPeriodIn = new Decimal(0);
-    let bigPeriodOut = new Decimal(0);
-    for (const t of bigPeriodTxns) {
-      const w = toDecimal(t.weight);
-      if (t.type === TransactionType.IN || t.type === TransactionType.OPENING_BALANCE) {
-        bigPeriodIn = bigPeriodIn.plus(w);
-      } else if (t.type === TransactionType.OUT || t.type === TransactionType.SETTLEMENT_RETURN) {
-        bigPeriodOut = bigPeriodOut.plus(w);
-      }
-    }
-
-    const bigOpenTxns = await prisma.transaction.findMany({
+    // 2. Total pending work across all customer karat accounts
+    // Pending stock for this machine only (open, unsettled entries)
+    const openTxns = await prisma.transaction.findMany({
       where: {
         status: TransactionStatus.ACTIVE,
         settlementId: null,
-        machineType: 'BIG',
+        machineType: machine,
         customer: { isActive: true },
       },
-      select: { customerId: true, karatId: true, type: true, weight: true },
+      select: {
+        customerId: true,
+        karatId: true,
+        type: true,
+        weight: true,
+        customer: { select: { name: true, shopName: true } },
+        karat: { select: { name: true } },
+      },
     });
-    const bigBalances = new Map<string, Decimal>();
-    for (const t of bigOpenTxns) {
+
+    const balanceMap = new Map<
+      string,
+      { customerId: string; customerName: string; shopName: string | null; karatId: string; karatName: string; bal: Decimal }
+    >();
+    for (const t of openTxns) {
       const key = `${t.customerId}|${t.karatId}`;
       const w = toDecimal(t.weight);
-      const cur = bigBalances.get(key) || new Decimal(0);
-      if (t.type === TransactionType.IN || t.type === TransactionType.OPENING_BALANCE) {
-        bigBalances.set(key, cur.plus(w));
-      } else {
-        bigBalances.set(key, cur.minus(w));
-      }
+      const entry = balanceMap.get(key) || {
+        customerId: t.customerId,
+        customerName: t.customer.name,
+        shopName: t.customer.shopName,
+        karatId: t.karatId,
+        karatName: t.karat.name,
+        bal: new Decimal(0),
+      };
+      entry.bal =
+        t.type === TransactionType.IN || t.type === TransactionType.OPENING_BALANCE
+          ? entry.bal.plus(w)
+          : entry.bal.minus(w);
+      balanceMap.set(key, entry);
     }
-    let bigPendingWork = new Decimal(0);
-    for (const bal of bigBalances.values()) {
-      if (bal.gt(0)) bigPendingWork = bigPendingWork.plus(bal);
-    }
-
-    // 2. Total pending work across all customer karat accounts
-    const allAccounts = await prisma.customerKaratAccount.findMany({
-      where: {
-        customer: { isActive: true },
-      },
-      include: {
-        customer: { select: { id: true, name: true, shopName: true } },
-        karat: { select: { id: true, name: true } },
-      },
-    });
 
     let totalPendingWork = new Decimal(0);
     const pendingBalancesList: Array<{
@@ -184,17 +179,16 @@ export async function GET(req: NextRequest) {
       balance: string;
     }> = [];
 
-    for (const acc of allAccounts) {
-      const bal = toDecimal(acc.cachedBalance);
-      if (bal.gt(0)) {
-        totalPendingWork = totalPendingWork.plus(bal);
+    for (const e of balanceMap.values()) {
+      if (e.bal.gt(0)) {
+        totalPendingWork = totalPendingWork.plus(e.bal);
         pendingBalancesList.push({
-          customerId: acc.customerId,
-          customerName: acc.customer.name,
-          shopName: acc.customer.shopName,
-          karatId: acc.karatId,
-          karatName: acc.karat.name,
-          balance: bal.toFixed(3),
+          customerId: e.customerId,
+          customerName: e.customerName,
+          shopName: e.shopName,
+          karatId: e.karatId,
+          karatName: e.karatName,
+          balance: e.bal.toFixed(3),
         });
       }
     }
@@ -204,6 +198,7 @@ export async function GET(req: NextRequest) {
 
     // 3. Making amount collected or billed in selected period (Cash & Gold)
     const settlementWhere: Prisma.SettlementWhereInput = {
+      machineType: machine,
       ...(startDate || endDate
         ? {
             settlementDate: {
@@ -236,6 +231,7 @@ export async function GET(req: NextRequest) {
     }
 
     const paymentWhere: Prisma.PaymentWhereInput = {
+      settlement: { machineType: machine },
       ...(startDate || endDate
         ? {
             paymentDate: {
@@ -262,6 +258,7 @@ export async function GET(req: NextRequest) {
 
     // 4. Recent transactions (latest 10)
     const recentTxns = await prisma.transaction.findMany({
+      where: { machineType: machine },
       take: 10,
       orderBy: { transactionDate: 'desc' },
       include: {
@@ -298,9 +295,6 @@ export async function GET(req: NextRequest) {
         totalDukanLoss: totalDukanLoss.toFixed(3),
         totalDollLoss: totalDollLoss.toFixed(3),
         totalGalaiLoss: totalGalaiLoss.toFixed(3),
-        bigPeriodIn: bigPeriodIn.toFixed(3),
-        bigPeriodOut: bigPeriodOut.toFixed(3),
-        bigPendingWork: bigPendingWork.toFixed(3),
       },
       recentTransactions: recentTxns.map((t) => ({
         id: t.id,

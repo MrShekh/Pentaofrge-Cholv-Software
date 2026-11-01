@@ -22,6 +22,7 @@ interface QuickTransactionModalProps {
   onClose: () => void;
   onSuccess: (message: string) => void;
   initialType?: TransactionType;
+  initialMachine?: 'HAND' | 'BIG';
   initialCustomerId?: string;
   initialKaratId?: string;
 }
@@ -31,6 +32,7 @@ export function QuickTransactionModal({
   onClose,
   onSuccess,
   initialType = TransactionType.IN,
+  initialMachine = 'HAND',
   initialCustomerId,
   initialKaratId,
 }: QuickTransactionModalProps) {
@@ -54,7 +56,7 @@ export function QuickTransactionModal({
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   });
   const [notes, setNotes] = useState<string>('');
-  const [machineType, setMachineType] = useState<'HAND' | 'BIG'>('HAND');
+  const [machineType, setMachineType] = useState<'HAND' | 'BIG'>(initialMachine);
 
   // Balance checking
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
@@ -101,7 +103,7 @@ export function QuickTransactionModal({
       setType(initialType || TransactionType.IN);
       setWeight('');
       setNotes('');
-      setMachineType('HAND');
+      setMachineType(initialMachine);
       setShowConfirmation(false);
       setErrorMessage(null);
       setAllowOverride(false);
@@ -111,7 +113,7 @@ export function QuickTransactionModal({
       setCurrentBalance(null);
       setShowConfirmation(false);
     }
-  }, [isOpen, initialCustomerId, initialKaratId, initialType]);
+  }, [isOpen, initialCustomerId, initialKaratId, initialType, initialMachine]);
 
   // Fetch balance whenever modal is open and customer or karat is selected
   useEffect(() => {
