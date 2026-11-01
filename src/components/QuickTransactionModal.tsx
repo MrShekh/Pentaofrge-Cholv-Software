@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { TransactionType } from '@prisma/client';
 import { X, AlertTriangle, ArrowDownLeft, ArrowUpRight, CheckCircle2 } from 'lucide-react';
+import { OutReceiptModal, OutReceiptData } from './OutReceiptModal';
 
 interface Customer {
   id: string;
@@ -71,6 +72,10 @@ export function QuickTransactionModal({
   const [allowOverride, setAllowOverride] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
   const [requiresOverride, setRequiresOverride] = useState(false);
+
+  // OUT Receipt Modal state
+  const [outReceiptData, setOutReceiptData] = useState<OutReceiptData | null>(null);
+  const [isOutReceiptOpen, setIsOutReceiptOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -227,7 +232,26 @@ export function QuickTransactionModal({
       }
 
       onSuccess(data.message || 'Transaction saved successfully');
-      onClose();
+
+      // If this was an OUT entry, show the small receipt printable slip
+      if (type === TransactionType.OUT && data.transaction) {
+        setOutReceiptData({
+          transactionNumber: data.transaction.transactionNumber,
+          customerName: data.transaction.customerName,
+          shopName: data.transaction.shopName,
+          phone: data.transaction.phone,
+          karatName: data.transaction.karatName,
+          machineType: data.transaction.machineType || machineType,
+          weight: data.transaction.weight,
+          date: data.transaction.date,
+          notes: data.transaction.notes || notes,
+          previousBalance: data.previousBalance,
+          newBalance: data.newBalance,
+        });
+        setIsOutReceiptOpen(true);
+      } else {
+        onClose();
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to record transaction';
       setErrorMessage(msg);
@@ -237,8 +261,9 @@ export function QuickTransactionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden my-8">
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+        <div className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden my-8">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
           <div className="flex items-center gap-2">
@@ -590,5 +615,17 @@ export function QuickTransactionModal({
         )}
       </div>
     </div>
+
+    {/* Out Entry 80mm Receipt Modal */}
+    <OutReceiptModal
+      isOpen={isOutReceiptOpen}
+      onClose={() => {
+        setIsOutReceiptOpen(false);
+        setOutReceiptData(null);
+        onClose();
+      }}
+      data={outReceiptData}
+    />
+  </>
   );
 }
