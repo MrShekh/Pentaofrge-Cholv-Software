@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Penta Chool Works',
-    short_name: 'Chool Ledger',
+    name: 'A.M Chool Works',
+    short_name: 'A.M Chool',
     description: 'Gold Cutting & Engraving Production Ledger',
     start_url: '/',
     scope: '/',

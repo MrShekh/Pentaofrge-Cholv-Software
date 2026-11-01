@@ -14,11 +14,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Penta Chool Works | Gold Cutting & Engraving Ledger',
+  title: 'A.M Chool | Gold Cutting & Engraving Ledger',
   description: 'Production ledger system for jewellery chool, cutting and engraving workers',
   manifest: '/manifest.webmanifest',
-  icons: { apple: '/apple-touch-icon.png' },
-  appleWebApp: { capable: true, title: 'Chool Ledger', statusBarStyle: 'default' },
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon-32x32.png', type: 'image/png', sizes: '32x32' },
+      { url: '/favicon-16x16.png', type: 'image/png', sizes: '16x16' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
+  appleWebApp: { capable: true, title: 'A.M Chool', statusBarStyle: 'default' },
 };
 
 export const viewport: Viewport = {

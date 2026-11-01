@@ -179,3 +179,4 @@ export function OutReceiptModal({ isOpen, onClose, data }: OutReceiptModalProps)
     </div>
   );
 }
+

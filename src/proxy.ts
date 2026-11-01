@@ -36,6 +36,6 @@ export const config = {
   // PWA files (manifest, service worker, icons) must be publicly reachable without a
   // session cookie, otherwise Chrome gets redirected to /login and refuses to offer "Install app".
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icon-192.png|icon-512.png|icon-maskable-512.png|apple-touch-icon.png).*)',
+    '/((?!_next/static|_next/image|favicon.ico|favicon-16x16.png|favicon-32x32.png|manifest.webmanifest|sw.js|icon-192.png|icon-512.png|icon-maskable-512.png|apple-touch-icon.png|logo.jpg).*)',
   ],
 };
