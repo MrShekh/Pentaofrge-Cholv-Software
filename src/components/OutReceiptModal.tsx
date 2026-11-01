@@ -107,15 +107,10 @@ export function OutReceiptModal({ isOpen, onClose, data }: OutReceiptModalProps)
             </div>
           </div>
 
-          {/* Customer & Karat */}
+          {/* Customer */}
           <div className="py-2.5 border-b border-dashed border-slate-200">
             <div className="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Customer:</div>
             <div className="font-bold text-sm text-slate-900">{data.customerName}</div>
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
-              <span className="font-bold text-slate-700 font-mono">{data.karatName}</span>
-              {data.shopName && <span>• {data.shopName}</span>}
-              {data.phone && <span>• {data.phone}</span>}
-            </div>
           </div>
 
           {/* Out Weight Main Block */}
