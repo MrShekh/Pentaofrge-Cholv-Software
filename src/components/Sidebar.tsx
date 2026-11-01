@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
@@ -64,16 +65,23 @@ export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
       >
         <div>
           {/* Header */}
-          <div className="flex items-center justify-between h-14 px-5 border-b border-slate-100">
-            <Link href="/" onClick={onClose} className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-md bg-slate-900 flex items-center justify-center text-amber-300 font-serif font-black text-sm">
-                P
+          <div className="flex items-center justify-between h-16 px-4 border-b border-slate-100">
+            <Link href="/" onClick={onClose} className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg overflow-hidden bg-black shrink-0 border border-slate-200/60 shadow-xs flex items-center justify-center">
+                <Image
+                  src="/logo.jpg"
+                  alt="A.M Logo"
+                  width={40}
+                  height={40}
+                  className="w-full h-full object-cover"
+                  priority
+                />
               </div>
-              <div className="leading-none">
+              <div className="leading-tight">
                 <span className="block font-bold text-slate-900 text-sm tracking-tight">
-                  Jewellery
+                  A.M Chool
                 </span>
-                <span className="block text-[9px] font-medium text-slate-400 uppercase tracking-widest mt-0.5">
+                <span className="block text-[9px] font-medium text-slate-400 uppercase tracking-widest">
                   Cutting Ledger
                 </span>
               </div>
