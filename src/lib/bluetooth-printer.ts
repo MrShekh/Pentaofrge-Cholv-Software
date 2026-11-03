@@ -10,6 +10,9 @@ const PRINTER_SERVICES = [
   '0000fee7-0000-1000-8000-00805f9b34fb', // Custom FEE7
 ];
 
+const STORAGE_KEY_PRINTER_ID = 'am_chool_default_printer_id';
+const STORAGE_KEY_PRINTER_NAME = 'am_chool_default_printer_name';
+
 // In-memory cached printer device for quick re-prints
 let cachedDevice: any = null;
 let cachedCharacteristic: any = null;
@@ -18,22 +21,95 @@ export function isWebBluetoothSupported(): boolean {
   return typeof navigator !== 'undefined' && 'bluetooth' in navigator;
 }
 
+export function getDefaultPrinterName(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(STORAGE_KEY_PRINTER_NAME);
+}
+
+export function clearDefaultPrinter(): void {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(STORAGE_KEY_PRINTER_ID);
+    localStorage.removeItem(STORAGE_KEY_PRINTER_NAME);
+  }
+  if (cachedDevice && cachedDevice.gatt && cachedDevice.gatt.connected) {
+    try { cachedDevice.gatt.disconnect(); } catch {}
+  }
+  cachedDevice = null;
+  cachedCharacteristic = null;
+}
+
+async function findWriteCharacteristic(server: any): Promise<any> {
+  for (const serviceUuid of PRINTER_SERVICES) {
+    try {
+      const service = await server.getPrimaryService(serviceUuid);
+      const characteristics = await service.getCharacteristics();
+      for (const char of characteristics) {
+        if (char.properties.write || char.properties.writeWithoutResponse) {
+          return char;
+        }
+      }
+    } catch {}
+  }
+
+  // Scan all primary services if standard UUIDs didn't match
+  try {
+    const services = await server.getPrimaryServices();
+    for (const service of services) {
+      try {
+        const characteristics = await service.getCharacteristics();
+        for (const char of characteristics) {
+          if (char.properties.write || char.properties.writeWithoutResponse) {
+            return char;
+          }
+        }
+      } catch {}
+    }
+  } catch {}
+
+  return null;
+}
+
 /**
- * Connect to thermal Bluetooth printer
+ * Connect to thermal Bluetooth printer.
+ * Remembers the printer as default so Chrome automatically connects on subsequent prints without popup picker!
  */
-export async function connectThermalPrinter(): Promise<any> {
+export async function connectThermalPrinter(forcePicker = false): Promise<any> {
   if (!isWebBluetoothSupported()) {
     throw new Error('Web Bluetooth is not supported on this browser. Please use Google Chrome on Android.');
   }
 
-  // Reuse existing connection if open
-  if (cachedDevice && cachedDevice.gatt && cachedDevice.gatt.connected && cachedCharacteristic) {
+  // 1. If currently connected, reuse immediately
+  if (!forcePicker && cachedDevice && cachedDevice.gatt && cachedDevice.gatt.connected && cachedCharacteristic) {
     return cachedCharacteristic;
   }
 
   const nav: any = navigator;
-  
-  // Request Bluetooth Device
+
+  // 2. Try automatic reconnect to previously saved default printer (getDevices API supported in modern Chrome)
+  const savedPrinterId = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_PRINTER_ID) : null;
+  if (!forcePicker && savedPrinterId && nav.bluetooth.getDevices) {
+    try {
+      const knownDevices = await nav.bluetooth.getDevices();
+      const matched = knownDevices.find((d: any) => d.id === savedPrinterId);
+      if (matched && matched.gatt) {
+        const server = await matched.gatt.connect();
+        const writeChar = await findWriteCharacteristic(server);
+        if (writeChar) {
+          cachedDevice = matched;
+          cachedCharacteristic = writeChar;
+          matched.addEventListener('gattserverdisconnected', () => {
+            cachedDevice = null;
+            cachedCharacteristic = null;
+          });
+          return writeChar;
+        }
+      }
+    } catch (e) {
+      console.warn('Auto-reconnect to saved printer failed, falling back to picker:', e);
+    }
+  }
+
+  // 3. User device picker
   const device = await nav.bluetooth.requestDevice({
     acceptAllDevices: true,
     optionalServices: PRINTER_SERVICES,
@@ -49,57 +125,23 @@ export async function connectThermalPrinter(): Promise<any> {
   });
 
   const server = await device.gatt.connect();
-
-  // Find the writable characteristic across supported services
-  let writeChar: any = null;
-
-  for (const serviceUuid of PRINTER_SERVICES) {
-    try {
-      const service = await server.getPrimaryService(serviceUuid);
-      const characteristics = await service.getCharacteristics();
-      for (const char of characteristics) {
-        if (char.properties.write || char.properties.writeWithoutResponse) {
-          writeChar = char;
-          break;
-        }
-      }
-      if (writeChar) break;
-    } catch {
-      // Continue searching next service
-    }
-  }
-
-  // If none matched predefined UUIDs, scan all primary services
-  if (!writeChar) {
-    try {
-      const services = await server.getPrimaryServices();
-      for (const service of services) {
-        try {
-          const characteristics = await service.getCharacteristics();
-          for (const char of characteristics) {
-            if (char.properties.write || char.properties.writeWithoutResponse) {
-              writeChar = char;
-              break;
-            }
-          }
-          if (writeChar) break;
-        } catch {}
-      }
-    } catch {}
-  }
+  const writeChar = await findWriteCharacteristic(server);
 
   if (!writeChar) {
     throw new Error('Could not find a writable print channel on the selected printer. Please make sure the printer is turned on and paired.');
   }
 
+  // Save as default printer
   cachedDevice = device;
   cachedCharacteristic = writeChar;
+  if (typeof window !== 'undefined') {
+    if (device.id) localStorage.setItem(STORAGE_KEY_PRINTER_ID, device.id);
+    if (device.name) localStorage.setItem(STORAGE_KEY_PRINTER_NAME, device.name);
+  }
+
   return writeChar;
 }
 
-/**
- * Send chunked ESC/POS bytes to avoid Bluetooth buffer overflows
- */
 export async function sendEscPosCommands(characteristic: any, data: Uint8Array): Promise<void> {
   const CHUNK_SIZE = 100; // Safe chunk size for BLE MTU
   for (let offset = 0; offset < data.length; offset += CHUNK_SIZE) {
