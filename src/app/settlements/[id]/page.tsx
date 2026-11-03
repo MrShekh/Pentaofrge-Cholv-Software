@@ -130,6 +130,7 @@ export default function SettlementReceiptPage({
         finalMakingAmount: data.settlement.finalMakingAmount,
         galaiLoss: data.settlement.galaiLoss,
         returnedGoldWeight: returnGoldStr,
+        inTransactions: inTransactions.map(t => ({ weight: t.weight, transactionDate: t.transactionDate, notes: t.notes })),
         outTransactions: outTransactions.map(t => ({
           weight: t.weight,
           transactionDate: t.transactionDate,

@@ -352,6 +352,7 @@ export async function printSettlementReceiptDirect(settlement: {
   finalMakingAmount?: string;
   galaiLoss?: string;
   returnedGoldWeight?: string;
+  inTransactions?: Array<{ weight: string; transactionDate: string | Date; notes?: string | null }>;
   outTransactions?: Array<{ weight: string; transactionDate: string | Date; notes?: string | null }>;
 }): Promise<void> {
   const characteristic = await connectThermalPrinter();
@@ -391,13 +392,25 @@ export async function printSettlementReceiptDirect(settlement: {
     .bold(false)
     .line('-');
 
-  // Received / In Weight
+  // Individual Received (IN) entries
+  if (settlement.inTransactions && settlement.inTransactions.length > 0) {
+    builder.bold(true).textLine('RECEIVED (IN):').bold(false);
+    settlement.inTransactions.forEach((t, i) => {
+      const inLabel = settlement.inTransactions!.length > 1 ? `  In #${i + 1}:` : '  In:';
+      builder.twoColumn(inLabel, `${t.weight} g`);
+      if (t.notes) {
+        builder.textLine(`    Order: ${t.notes}`);
+      }
+    });
+    builder.line('-');
+  }
+
+  // TOTAL IN
   builder
     .bold(true)
-    .twoColumn('RECEIVED (IN):', `${settlement.totalInWeight} g`)
     .twoColumn('TOTAL IN:', `${settlement.totalInWeight} g`)
     .bold(false)
-    .line('-');
+    .line('=');
 
   // Out entries
   if (settlement.outTransactions && settlement.outTransactions.length > 0) {
@@ -449,4 +462,3 @@ export async function printSettlementReceiptDirect(settlement: {
 
   await sendEscPosCommands(characteristic, builder.getBytes());
 }
-
