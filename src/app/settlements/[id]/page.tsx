@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Printer, Pencil, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Printer, Pencil, CheckCircle2, Bluetooth, Loader2 } from 'lucide-react';
 import { EditSettlementModal } from '@/components/EditSettlementModal';
+import { printSettlementReceiptDirect } from '@/lib/bluetooth-printer';
 
 interface SettlementDetail {
   id: string;
@@ -88,6 +89,8 @@ export default function SettlementReceiptPage({
   const [isLoading, setIsLoading] = useState(true);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isBluetoothPrinting, setIsBluetoothPrinting] = useState(false);
+  const [bluetoothError, setBluetoothError] = useState<string | null>(null);
 
   const fetchReceipt = () => {
     setIsLoading(true);
@@ -107,6 +110,41 @@ export default function SettlementReceiptPage({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleBluetoothPrint = async () => {
+    if (!data?.settlement) return;
+    setIsBluetoothPrinting(true);
+    setBluetoothError(null);
+    try {
+      await printSettlementReceiptDirect({
+        settlementNumber: data.settlement.settlementNumber,
+        customerName: data.settlement.customer.name,
+        karatName: data.settlement.karat.name,
+        settlementDate: data.settlement.settlementDate,
+        machineType: (data.settlement as any).machineType || 'HAND',
+        totalInWeight: data.settlement.totalInWeight,
+        totalOutWeight: data.settlement.totalOutWeight,
+        chargeableWeight: data.settlement.chargeableWeight,
+        finalMakingAmount: data.settlement.finalMakingAmount,
+        galaiLoss: data.settlement.galaiLoss,
+        returnedGoldWeight: returnGoldStr,
+        outTransactions: outTransactions.map(t => ({
+          weight: t.weight,
+          transactionDate: t.transactionDate,
+          notes: t.notes,
+        })),
+      });
+      setToastMessage('Receipt printed successfully on Bluetooth printer!');
+      setTimeout(() => setToastMessage(null), 4000);
+    } catch (err: any) {
+      console.error('Bluetooth print error:', err);
+      if (err.name !== 'NotFoundError') {
+        setBluetoothError(err.message || 'Failed to print via Bluetooth');
+      }
+    } finally {
+      setIsBluetoothPrinting(false);
+    }
   };
   if (isLoading && !data) {
     return <div className="py-20 text-center text-xs text-slate-400">Loading settlement receipt...</div>;
@@ -190,6 +228,12 @@ export default function SettlementReceiptPage({
         <div className="fixed top-4 right-4 z-50 bg-emerald-900 text-white px-4 py-2.5 rounded-xl shadow-lg text-xs font-semibold flex items-center gap-2 border border-emerald-700 animate-in fade-in slide-in-from-top-2 no-print">
           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           {toastMessage}
+        </div>
+      )}
+
+            {bluetoothError && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-2.5 rounded-xl text-xs font-medium no-print">
+          {bluetoothError}
         </div>
       )}
 

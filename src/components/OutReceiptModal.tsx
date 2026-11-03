@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
-import { Printer, X, CheckCircle2 } from 'lucide-react';
+import { Printer, X, CheckCircle2, Bluetooth, Loader2 } from 'lucide-react';
+import { printOutReceiptDirect } from '@/lib/bluetooth-printer';
 
 export interface OutReceiptData {
   transactionNumber: string;
@@ -25,10 +26,38 @@ interface OutReceiptModalProps {
 }
 
 export function OutReceiptModal({ isOpen, onClose, data }: OutReceiptModalProps) {
+  const [isBluetoothPrinting, setIsBluetoothPrinting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   if (!isOpen || !data) return null;
 
-  const handlePrint = () => {
+  const handleStandardPrint = () => {
     window.print();
+  };
+
+  const handleBluetoothPrint = async () => {
+    setIsBluetoothPrinting(true);
+    setErrorMessage(null);
+    try {
+      await printOutReceiptDirect({
+        transactionNumber: data.transactionNumber,
+        customerName: data.customerName,
+        machineType: data.machineType,
+        weight: data.weight,
+        date: data.date,
+        notes: data.notes,
+        previousBalance: data.previousBalance,
+        newBalance: data.newBalance,
+      });
+    } catch (err: any) {
+      console.error('Bluetooth print error:', err);
+      // If user cancelled device picker, do nothing
+      if (err.name !== 'NotFoundError') {
+        setErrorMessage(err.message || 'Failed to print via Bluetooth');
+      }
+    } finally {
+      setIsBluetoothPrinting(false);
+    }
   };
 
   const formattedDate = new Date(data.date).toLocaleString('en-IN', {
@@ -51,11 +80,24 @@ export function OutReceiptModal({ isOpen, onClose, data }: OutReceiptModalProps)
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-xs transition"
+              onClick={handleBluetoothPrint}
+              disabled={isBluetoothPrinting}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white rounded-lg text-xs font-bold shadow-xs transition"
+              title="Print directly to paired Bluetooth POS printer"
+            >
+              {isBluetoothPrinting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Bluetooth className="w-3.5 h-3.5" />
+              )}
+              <span>{isBluetoothPrinting ? 'Printing...' : 'Direct BT Print'}</span>
+            </button>
+            <button
+              onClick={handleStandardPrint}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold shadow-xs transition"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Print</span>
+              <span>Standard</span>
             </button>
             <button
               onClick={onClose}
@@ -154,14 +196,32 @@ export function OutReceiptModal({ isOpen, onClose, data }: OutReceiptModalProps)
           </div>
         </div>
 
+        {errorMessage && (
+          <div className="mx-4 mt-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg no-print">
+            {errorMessage}
+          </div>
+        )}
+
         {/* Action Button inside modal footer */}
-        <div className="p-3 bg-slate-50 border-t border-slate-200 flex gap-2 no-print">
+        <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row gap-2 no-print">
           <button
-            onClick={handlePrint}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-xs"
+            onClick={handleBluetoothPrint}
+            disabled={isBluetoothPrinting}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white rounded-xl text-xs font-bold transition shadow-xs"
+          >
+            {isBluetoothPrinting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Bluetooth className="w-3.5 h-3.5" />
+            )}
+            <span>{isBluetoothPrinting ? 'Printing to POSIFLOW...' : 'Bluetooth Direct Print'}</span>
+          </button>
+          <button
+            onClick={handleStandardPrint}
+            className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold transition"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>Print Slip (80mm)</span>
+            <span>Standard</span>
           </button>
           <button
             onClick={onClose}
