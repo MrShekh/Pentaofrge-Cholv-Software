@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ArrowLeft, Printer, Pencil, CheckCircle2, Bluetooth, Loader2 } from 'lucide-react';
 import { EditSettlementModal } from '@/components/EditSettlementModal';
 import { printSettlementReceiptDirect } from '@/lib/bluetooth-printer';
@@ -245,7 +246,6 @@ export default function SettlementReceiptPage({
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Back
         </Link>
-
         <div className="flex items-center gap-2">
           <button
             onClick={() => setEditModalOpen(true)}
@@ -256,11 +256,25 @@ export default function SettlementReceiptPage({
           </button>
 
           <button
+            onClick={handleBluetoothPrint}
+            disabled={isBluetoothPrinting}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white rounded-lg text-xs font-bold transition shadow-xs"
+            title="Direct print to paired POSIFLOW Bluetooth printer"
+          >
+            {isBluetoothPrinting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Bluetooth className="w-3.5 h-3.5" />
+            )}
+            <span>{isBluetoothPrinting ? 'Printing...' : 'Direct BT Print'}</span>
+          </button>
+
+          <button
             onClick={handlePrint}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition shadow-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition shadow-xs"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>Print (80mm)</span>
+            <span>Standard</span>
           </button>
         </div>
       </div>
@@ -300,6 +314,17 @@ export default function SettlementReceiptPage({
       <div className="receipt-80mm bg-white rounded-xl border border-slate-300 shadow-md p-4 sm:p-5 text-slate-900 font-sans space-y-3 print:p-0 print:border-none print:shadow-none">
         {/* Header: Only Main Title & Business Details */}
         <div className="text-center space-y-1 pb-3 border-b-2 border-dashed border-slate-300">
+          <div className="flex justify-center mb-1.5">
+            <div className="w-10 h-10 rounded-full overflow-hidden bg-black border border-slate-300 flex items-center justify-center">
+              <Image
+                src="/logo.jpg"
+                alt="A.M Logo"
+                width={40}
+                height={40}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </div>
           <h2 className="text-lg font-black uppercase tracking-tight text-slate-900 leading-tight">
             {business.name}
           </h2>

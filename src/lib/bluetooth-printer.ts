@@ -407,3 +407,4 @@ export async function printSettlementReceiptDirect(settlement: {
 
   await sendEscPosCommands(characteristic, builder.getBytes());
 }
+
