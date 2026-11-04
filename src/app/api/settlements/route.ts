@@ -13,10 +13,12 @@ export async function GET(req: NextRequest) {
     const customerId = searchParams.get('customerId');
     const karatId = searchParams.get('karatId');
     const paymentStatus = searchParams.get('paymentStatus');
+    const machine = searchParams.get('machine');
 
     const where: Prisma.SettlementWhereInput = {
       ...(customerId ? { customerId } : {}),
       ...(karatId ? { karatId } : {}),
+      ...(machine === 'BIG' || machine === 'HAND' ? { machineType: machine as any } : {}),
       ...(paymentStatus ? { paymentStatus: paymentStatus as Prisma.EnumPaymentStatusFilter['equals'] } : {}),
     };
 
@@ -60,6 +62,7 @@ export async function GET(req: NextRequest) {
         return {
           id: s.id,
           settlementNumber: s.settlementNumber,
+          machineType: s.machineType,
           customerId: s.customerId,
           customerName: s.customer.name,
           shopName: s.customer.shopName,

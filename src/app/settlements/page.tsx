@@ -22,6 +22,7 @@ import { EditSettlementModal, SettlementEditData } from '@/components/EditSettle
 interface SettlementItem {
   id: string;
   settlementNumber: string;
+  machineType?: 'HAND' | 'BIG';
   customerId: string;
   customerName: string;
   shopName: string | null;
@@ -74,6 +75,9 @@ function SettlementsContent() {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [karats, setKarats] = useState<KaratOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Filter history state
+  const [historyMachineFilter, setHistoryMachineFilter] = useState<'ALL' | 'HAND' | 'BIG'>('ALL');
 
   // New settlement form state
   const [showNewModal, setShowNewModal] = useState(Boolean(preCustomerId));
@@ -184,7 +188,11 @@ function SettlementsContent() {
 
   const fetchSettlements = () => {
     setIsLoading(true);
-    fetch('/api/settlements')
+    const url =
+      historyMachineFilter === 'ALL'
+        ? '/api/settlements'
+        : `/api/settlements?machine=${historyMachineFilter}`;
+    fetch(url)
       .then(async (res) => {
         if (res.status === 401) {
           window.location.href = '/login';
@@ -199,6 +207,10 @@ function SettlementsContent() {
       .catch((err) => console.warn('Settlements fetch warning:', err))
       .finally(() => setIsLoading(false));
   };
+
+  useEffect(() => {
+    fetchSettlements();
+  }, [historyMachineFilter]);
 
   useEffect(() => {
     fetchSettlements();
@@ -381,11 +393,30 @@ function SettlementsContent() {
 
       {/* Settlement History List (Section 12) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-900">Settlement History</h2>
-          <span className="text-xs text-slate-400 font-mono">
-            {settlements.length} settlements on record
-          </span>
+        <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Settlement History</h2>
+            <span className="text-xs text-slate-400 font-mono">
+              {settlements.length} settlements on record
+            </span>
+          </div>
+
+          {/* Machine Filter Toggle */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+            {(['ALL', 'HAND', 'BIG'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setHistoryMachineFilter(m)}
+                className={`px-3 py-1 rounded-lg transition ${
+                  historyMachineFilter === m
+                    ? 'bg-white text-slate-900 shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {m === 'ALL' ? 'All' : m === 'HAND' ? 'Hand Machine' : 'Big Machine (Boro)'}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -395,6 +426,7 @@ function SettlementsContent() {
                 <th className="py-3 px-4">Settlement #</th>
                 <th className="py-3 px-3">Date</th>
                 <th className="py-3 px-4">Customer</th>
+                <th className="py-3 px-3">Machine</th>
                 <th className="py-3 px-3">Karat</th>
                 <th className="py-3 px-3 text-right">Total IN</th>
                 <th className="py-3 px-3 text-right">Finished OUT</th>
@@ -409,7 +441,7 @@ function SettlementsContent() {
             <tbody className="divide-y divide-slate-100 font-medium">
               {isLoading ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-slate-400">
+                  <td colSpan={13} className="py-12 text-center text-slate-400">
                     Loading settlement history...
                   </td>
                 </tr>
@@ -455,6 +487,17 @@ function SettlementsContent() {
                             {s.shopName}
                           </span>
                         )}
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            s.machineType === 'BIG'
+                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}
+                        >
+                          {s.machineType === 'BIG' ? 'Big (Boro)' : 'Hand'}
+                        </span>
                       </td>
                       <td className="py-3 px-3">
                         <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold text-[10px]">

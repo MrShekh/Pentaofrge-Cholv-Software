@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
     const customerId = searchParams.get('customerId');
     const karatId = searchParams.get('karatId');
     const type = searchParams.get('type') as TransactionType | null;
+    const machine = searchParams.get('machine');
     const status = searchParams.get('status') as TransactionStatus | null;
     const search = searchParams.get('search')?.trim();
     const dateFrom = searchParams.get('dateFrom');
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
       ...(customerId ? { customerId } : {}),
       ...(karatId ? { karatId } : {}),
       ...(type ? { type } : {}),
+      ...(machine === 'BIG' || machine === 'HAND' ? { machineType: machine as MachineType } : {}),
       ...(status ? { status } : {}),
       ...(search
         ? {
@@ -66,6 +68,7 @@ export async function GET(req: NextRequest) {
       transactions: transactions.map((t) => ({
         id: t.id,
         transactionNumber: t.transactionNumber,
+        machineType: t.machineType,
         customerId: t.customerId,
         customerName: t.customer.name,
         shopName: t.customer.shopName,

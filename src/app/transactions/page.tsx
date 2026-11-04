@@ -21,6 +21,7 @@ import { TransactionType } from '@prisma/client';
 interface TxItem {
   id: string;
   transactionNumber: string;
+  machineType?: 'HAND' | 'BIG';
   customerId: string;
   customerName: string;
   shopName: string | null;
@@ -64,6 +65,7 @@ function TransactionsContent() {
   const [selectedCustomerId, setSelectedCustomerId] = useState(initialCustomer);
   const [selectedKaratId, setSelectedKaratId] = useState('');
   const [selectedType, setSelectedType] = useState('');
+  const [selectedMachine, setSelectedMachine] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
@@ -87,6 +89,7 @@ function TransactionsContent() {
     if (selectedCustomerId) params.append('customerId', selectedCustomerId);
     if (selectedKaratId) params.append('karatId', selectedKaratId);
     if (selectedType) params.append('type', selectedType);
+    if (selectedMachine) params.append('machine', selectedMachine);
     if (dateFrom) params.append('dateFrom', dateFrom);
     if (dateTo) params.append('dateTo', dateTo);
 
@@ -118,7 +121,7 @@ function TransactionsContent() {
 
   useEffect(() => {
     fetchTxns();
-  }, [selectedCustomerId, selectedKaratId, selectedType, dateFrom, dateTo]);
+  }, [selectedCustomerId, selectedKaratId, selectedType, selectedMachine, dateFrom, dateTo]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,7 +198,7 @@ function TransactionsContent() {
           </button>
         </form>
 
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2 border-t border-slate-100 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-2 border-t border-slate-100 text-xs">
           <select
             value={selectedCustomerId}
             onChange={(e) => setSelectedCustomerId(e.target.value)}
@@ -220,6 +223,16 @@ function TransactionsContent() {
                 {k.name}
               </option>
             ))}
+          </select>
+
+          <select
+            value={selectedMachine}
+            onChange={(e) => setSelectedMachine(e.target.value)}
+            className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 font-semibold"
+          >
+            <option value="">All Machines</option>
+            <option value="HAND">Hand Machine</option>
+            <option value="BIG">Big Machine (Boro)</option>
           </select>
 
           <select
@@ -262,6 +275,7 @@ function TransactionsContent() {
                 <th className="py-3 px-4">TXN #</th>
                 <th className="py-3 px-3">Date & Time</th>
                 <th className="py-3 px-4">Customer</th>
+                <th className="py-3 px-3">Machine</th>
                 <th className="py-3 px-3">Karat</th>
                 <th className="py-3 px-3">Type</th>
                 <th className="py-3 px-4 text-right">Weight</th>
@@ -273,7 +287,7 @@ function TransactionsContent() {
             <tbody className="divide-y divide-slate-100 font-medium">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     Loading transactions...
                   </td>
                 </tr>
@@ -315,6 +329,17 @@ function TransactionsContent() {
                         >
                           {t.customerName}
                         </Link>
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            t.machineType === 'BIG'
+                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}
+                        >
+                          {t.machineType === 'BIG' ? 'Big (Boro)' : 'Hand'}
+                        </span>
                       </td>
                       <td className="py-3 px-3">
                         <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold text-[10px]">
