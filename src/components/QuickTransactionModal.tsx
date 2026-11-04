@@ -83,7 +83,7 @@ export function QuickTransactionModal({
       setDate(getLocalDate());
       const now = new Date();
       setTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
-      fetch('/api/customers')
+      fetch('/api/customers?simple=true')
         .then((res) => res.json())
         .then((data) => {
           if (data.customers) setCustomers(data.customers);

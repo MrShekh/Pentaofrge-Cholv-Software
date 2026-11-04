@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
     const searchParams = req.nextUrl.searchParams;
     const search = searchParams.get('search')?.trim() || '';
     const activeOnly = searchParams.get('active') !== 'false';
+    const isSimple = searchParams.get('simple') === 'true';
 
     const where: Prisma.CustomerWhereInput = {
       ...(activeOnly ? { isActive: true } : {}),
@@ -26,6 +27,21 @@ export async function GET(req: NextRequest) {
           }
         : {}),
     };
+
+    // Fast path for modals & dropdowns (no heavy calculation of accounts, transactions, settlements)
+    if (isSimple) {
+      const customers = await prisma.customer.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          shopName: true,
+          phone: true,
+        },
+        orderBy: { name: 'asc' },
+      });
+      return NextResponse.json({ customers });
+    }
 
     const customers = await prisma.customer.findMany({
       where,

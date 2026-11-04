@@ -14,7 +14,7 @@ export async function GET(
     const machineParam = req.nextUrl.searchParams.get('machine');
     const machineFilter = machineParam === 'BIG' || machineParam === 'HAND' ? machineParam : null;
 
-    const [customer, karat, allActiveTxns] = await Promise.all([
+    const [customer, karat, allActiveTxns, transactions, settlements] = await Promise.all([
       prisma.customer.findUniqueOrThrow({ where: { id: customerId } }),
       prisma.karat.findUniqueOrThrow({ where: { id: karatId } }),
       prisma.transaction.findMany({
@@ -25,6 +25,40 @@ export async function GET(
           settlementId: null,
         },
         select: { machineType: true, type: true, weight: true, transactionDate: true },
+      }),
+      prisma.transaction.findMany({
+        where: {
+          customerId,
+          karatId,
+          ...(machineFilter ? { machineType: machineFilter } : {}),
+        },
+        orderBy: { transactionDate: 'asc' },
+        include: {
+          createdBy: { select: { id: true, name: true, username: true } },
+          voidedBy: { select: { id: true, name: true, username: true } },
+          settlement: {
+            select: {
+              id: true,
+              settlementNumber: true,
+              settlementDate: true,
+              finalMakingAmount: true,
+              paymentStatus: true,
+            },
+          },
+        },
+      }),
+      prisma.settlement.findMany({
+        where: {
+          customerId,
+          karatId,
+        },
+        orderBy: { settlementDate: 'desc' },
+        include: {
+          transactions: {
+            where: { status: 'ACTIVE' },
+            select: { id: true, type: true, weight: true, notes: true },
+          },
+        },
       }),
     ]);
 
@@ -58,44 +92,6 @@ export async function GET(
         : activeHandWeight.gt(0) && activeBigWeight.lte(0)
         ? 'HAND'
         : lastActiveMachine || (activeBigWeight.gt(activeHandWeight) ? 'BIG' : 'HAND');
-
-    // Fetch all transactions for this account
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        customerId,
-        karatId,
-        ...(machineFilter ? { machineType: machineFilter } : {}),
-      },
-      orderBy: { transactionDate: 'asc' },
-      include: {
-        createdBy: { select: { id: true, name: true, username: true } },
-        voidedBy: { select: { id: true, name: true, username: true } },
-        settlement: {
-          select: {
-            id: true,
-            settlementNumber: true,
-            settlementDate: true,
-            finalMakingAmount: true,
-            paymentStatus: true,
-          },
-        },
-      },
-    });
-
-    // Fetch past settlements for this customer + karat
-    const settlements = await prisma.settlement.findMany({
-      where: {
-        customerId,
-        karatId,
-      },
-      orderBy: { settlementDate: 'desc' },
-      include: {
-        transactions: {
-          where: { status: 'ACTIVE' },
-          select: { id: true, type: true, weight: true, notes: true },
-        },
-      },
-    });
 
     const formattedSettlements = settlements.map((s) => {
       const dukanLossTxn = s.transactions.find((t) => t.notes?.includes('(Dukan loss)'));

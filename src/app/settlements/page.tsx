@@ -213,9 +213,7 @@ function SettlementsContent() {
   }, [historyMachineFilter]);
 
   useEffect(() => {
-    fetchSettlements();
-
-    fetch('/api/customers')
+    fetch('/api/customers?simple=true')
       .then(async (res) => {
         if (!res.ok) return null;
         return res.json();
@@ -241,7 +239,7 @@ function SettlementsContent() {
       .catch((err) => console.warn('Karats fetch error:', err));
   }, []);
 
-  // When customer or karat changes, auto-detect their active machine (prioritize Big Machine if customer has Big orders)
+  // Fetch ledger summary and auto-detect machine for selected customer & karat
   const hasAppliedInitialMachine = useRef(false);
   useEffect(() => {
     if (selectedCustomerId && selectedKaratId) {
@@ -249,26 +247,16 @@ function SettlementsContent() {
       if (!hasAppliedInitialMachine.current && urlMachine) {
         hasAppliedInitialMachine.current = true;
         setMachineType(urlMachine === 'BIG' ? 'BIG' : 'HAND');
-        return;
       }
-      fetch(`/api/customers/${selectedCustomerId}/karats/${selectedKaratId}`)
-        .then((res) => res.json())
-        .then((d) => {
-          if (d?.summary?.suggestedMachine) {
-            setMachineType(d.summary.suggestedMachine);
-          }
-        })
-        .catch(console.error);
-    }
-  }, [selectedCustomerId, selectedKaratId, searchParams]);
 
-  // Fetch ledger summary for selected customer & karat
-  useEffect(() => {
-    if (selectedCustomerId && selectedKaratId) {
       fetch(`/api/customers/${selectedCustomerId}/karats/${selectedKaratId}?machine=${machineType}`)
         .then((res) => res.json())
         .then((d) => {
-          if (d.summary) {
+          if (!hasAppliedInitialMachine.current && d?.summary?.suggestedMachine) {
+            hasAppliedInitialMachine.current = true;
+            setMachineType(d.summary.suggestedMachine);
+          }
+          if (d?.summary) {
             const totIn = parseFloat(d.summary.totalIn);
             const totOut = parseFloat(d.summary.totalOut);
             const bal = parseFloat(d.summary.currentBalance);
@@ -289,7 +277,7 @@ function SettlementsContent() {
     } else {
       setAccountSummary(null);
     }
-  }, [selectedCustomerId, selectedKaratId, machineType]);
+  }, [selectedCustomerId, selectedKaratId, machineType, searchParams]);
 
   const handleSubmitSettlement = async (e: React.FormEvent) => {
     e.preventDefault();

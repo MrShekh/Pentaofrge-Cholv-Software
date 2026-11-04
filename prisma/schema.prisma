@@ -1,7 +1,7 @@
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -190,6 +190,11 @@ model Transaction {
   voidedBy  User?                 @relation("TransactionVoider", fields: [voidedById], references: [id])
 
   @@index([customerId, karatId])
+  @@index([customerId, karatId, status, settlementId])
+  @@index([customerId, status, settlementId])
+  @@index([settlementId])
+  @@index([status, settlementId, machineType])
+  @@index([machineType, transactionDate])
   @@index([transactionDate])
   @@index([status])
   @@index([type])
@@ -245,6 +250,8 @@ model Settlement {
 
   @@index([customerId, karatId])
   @@index([settlementDate])
+  @@index([machineType])
+  @@index([machineType, settlementDate])
 }
 
 model Payment {
