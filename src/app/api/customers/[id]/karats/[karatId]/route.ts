@@ -216,6 +216,7 @@ export async function GET(
       const formattedEntry = {
         id: t.id,
         transactionNumber: t.transactionNumber,
+        machineType: t.machineType,
         date: t.transactionDate,
         type: t.type,
         status: t.status,
