@@ -24,12 +24,15 @@ export async function GET(
           status: TransactionStatus.ACTIVE,
           settlementId: null,
         },
-        select: { machineType: true, type: true, weight: true },
+        select: { machineType: true, type: true, weight: true, transactionDate: true },
       }),
     ]);
 
     let activeBigWeight = new Decimal(0);
     let activeHandWeight = new Decimal(0);
+    let lastActiveMachine: 'BIG' | 'HAND' | null = null;
+    let lastActiveTime: number = 0;
+
     for (const at of allActiveTxns) {
       const w = toDecimal(at.weight);
       const isAdd = at.type === TransactionType.IN || at.type === TransactionType.OPENING_BALANCE;
@@ -38,12 +41,23 @@ export async function GET(
       } else {
         activeHandWeight = isAdd ? activeHandWeight.plus(w) : activeHandWeight.minus(w);
       }
+      const tTime = new Date(at.transactionDate).getTime();
+      if (tTime >= lastActiveTime) {
+        lastActiveTime = tTime;
+        lastActiveMachine = at.machineType === 'BIG' ? 'BIG' : 'HAND';
+      }
     }
-    const suggestedMachine: 'BIG' | 'HAND' = activeBigWeight.gt(0) && activeHandWeight.lte(0)
-      ? 'BIG'
-      : activeBigWeight.gt(activeHandWeight)
-      ? 'BIG'
-      : 'HAND';
+
+    // Determine the active machine:
+    // 1. If only Big machine has balance (> 0) and Hand has none (<= 0), definitely BIG
+    // 2. If only Hand machine has balance (> 0) and Big has none (<= 0), definitely HAND
+    // 3. If both have positive balance or both are equal, use the machine of the most recent active order
+    const suggestedMachine: 'BIG' | 'HAND' =
+      activeBigWeight.gt(0) && activeHandWeight.lte(0)
+        ? 'BIG'
+        : activeHandWeight.gt(0) && activeBigWeight.lte(0)
+        ? 'HAND'
+        : lastActiveMachine || (activeBigWeight.gt(activeHandWeight) ? 'BIG' : 'HAND');
 
     // Fetch all transactions for this account
     const transactions = await prisma.transaction.findMany({

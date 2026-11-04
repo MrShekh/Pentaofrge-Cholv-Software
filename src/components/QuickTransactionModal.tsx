@@ -58,6 +58,7 @@ export function QuickTransactionModal({
   });
   const [notes, setNotes] = useState<string>('');
   const [machineType, setMachineType] = useState<'HAND' | 'BIG'>(initialMachine);
+  const [suggestedMachine, setSuggestedMachine] = useState<'HAND' | 'BIG'>('HAND');
 
   // Balance checking
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
@@ -136,9 +137,12 @@ export function QuickTransactionModal({
             setCurrentBalance(0);
           }
 
-          // If doing an OUT entry and customer has pending Big Machine balance but no Hand balance (or more Big balance), auto-select BIG machine
-          if (type === TransactionType.OUT && data.summary?.suggestedMachine) {
-            setMachineType(data.summary.suggestedMachine);
+          // If doing an OUT entry or customer has pending Big Machine balance, auto-detect machine
+          if (data.summary?.suggestedMachine) {
+            setSuggestedMachine(data.summary.suggestedMachine);
+            if (type === TransactionType.OUT || initialMachine === 'BIG') {
+              setMachineType(data.summary.suggestedMachine);
+            }
           }
         })
         .catch((err) => {
@@ -149,7 +153,14 @@ export function QuickTransactionModal({
     } else if (!isOpen) {
       setCurrentBalance(null);
     }
-  }, [isOpen, selectedCustomerId, selectedKaratId]);
+  }, [isOpen, selectedCustomerId, selectedKaratId, type, initialMachine]);
+
+  const handleTypeSelect = (newType: TransactionType) => {
+    setType(newType);
+    if (newType === TransactionType.OUT && suggestedMachine) {
+      setMachineType(suggestedMachine);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -316,7 +327,7 @@ export function QuickTransactionModal({
             <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-lg">
               <button
                 type="button"
-                onClick={() => setType(TransactionType.IN)}
+                onClick={() => handleTypeSelect(TransactionType.IN)}
                 className={`py-2 text-sm font-semibold rounded-md transition ${
                   type === TransactionType.IN
                     ? 'bg-emerald-600 text-white shadow-xs'
@@ -327,7 +338,7 @@ export function QuickTransactionModal({
               </button>
               <button
                 type="button"
-                onClick={() => setType(TransactionType.OUT)}
+                onClick={() => handleTypeSelect(TransactionType.OUT)}
                 className={`py-2 text-sm font-semibold rounded-md transition ${
                   type === TransactionType.OUT
                     ? 'bg-blue-600 text-white shadow-xs'

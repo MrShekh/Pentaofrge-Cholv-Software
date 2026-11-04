@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
@@ -241,6 +241,27 @@ function SettlementsContent() {
       .catch((err) => console.warn('Karats fetch error:', err));
   }, []);
 
+  // When customer or karat changes, auto-detect their active machine (prioritize Big Machine if customer has Big orders)
+  const hasAppliedInitialMachine = useRef(false);
+  useEffect(() => {
+    if (selectedCustomerId && selectedKaratId) {
+      const urlMachine = searchParams.get('machine');
+      if (!hasAppliedInitialMachine.current && urlMachine) {
+        hasAppliedInitialMachine.current = true;
+        setMachineType(urlMachine === 'BIG' ? 'BIG' : 'HAND');
+        return;
+      }
+      fetch(`/api/customers/${selectedCustomerId}/karats/${selectedKaratId}`)
+        .then((res) => res.json())
+        .then((d) => {
+          if (d?.summary?.suggestedMachine) {
+            setMachineType(d.summary.suggestedMachine);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [selectedCustomerId, selectedKaratId, searchParams]);
+
   // Fetch ledger summary for selected customer & karat
   useEffect(() => {
     if (selectedCustomerId && selectedKaratId) {
@@ -262,11 +283,6 @@ function SettlementsContent() {
             setDukanLossWeight('');
             setDollLossWeight('');
             setOrderWeight('');
-
-            // If current machine has 0 balance but the other has active balance, auto-switch machine
-            if (bal === 0 && d.summary.suggestedMachine && d.summary.suggestedMachine !== machineType) {
-              setMachineType(d.summary.suggestedMachine);
-            }
           }
         })
         .catch(console.error);
@@ -689,13 +705,15 @@ function SettlementsContent() {
                         key={m}
                         type="button"
                         onClick={() => setMachineType(m)}
-                        className={`py-2 rounded-xl text-xs font-semibold border transition ${
+                        className={`py-2 rounded-xl text-xs font-bold border transition ${
                           machineType === m
-                            ? 'bg-slate-900 text-white border-slate-900'
+                            ? m === 'BIG'
+                              ? 'bg-purple-700 text-white border-purple-700 shadow-xs ring-2 ring-purple-400/30'
+                              : 'bg-slate-900 text-white border-slate-900 shadow-xs'
                             : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                         }`}
                       >
-                        {m === 'HAND' ? 'Hand Machine' : 'Big Machine'}
+                        {m === 'HAND' ? 'Hand Machine' : 'Big Machine (Boro)'}
                       </button>
                     ))}
                   </div>

@@ -33,6 +33,13 @@ interface KaratAccountData {
   totalOut: string;
   totalAdjusted: string;
   balance: string;
+  handBalance?: string;
+  bigBalance?: string;
+  handTotalIn?: string;
+  handTotalOut?: string;
+  bigTotalIn?: string;
+  bigTotalOut?: string;
+  suggestedMachine?: 'HAND' | 'BIG';
   lastTransactionDate: string | null;
   transactionCount: number;
 }
@@ -74,6 +81,8 @@ interface CustomerData {
   summary: {
     totalActiveKaratAccounts: number;
     totalPendingGold: string;
+    handPendingGold?: string;
+    bigPendingGold?: string;
     totalOutstandingMaking: string;
     settlementCount: number;
   };
@@ -93,6 +102,7 @@ export default function CustomerDetailPage({
   const [quickTxOpen, setQuickTxOpen] = useState(false);
   const [quickTxType, setQuickTxType] = useState<TransactionType>(TransactionType.IN);
   const [targetKaratId, setTargetKaratId] = useState<string | undefined>(undefined);
+  const [targetMachine, setTargetMachine] = useState<'HAND' | 'BIG'>('HAND');
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
   // Edit Settlement Modal states
@@ -160,9 +170,15 @@ export default function CustomerDetailPage({
     return () => window.removeEventListener('transaction-updated', handleUpdate);
   }, [id]);
 
-  const openTx = (type: TransactionType, karatId?: string) => {
+  const openTx = (type: TransactionType, karatId?: string, machine?: 'HAND' | 'BIG') => {
     setQuickTxType(type);
     setTargetKaratId(karatId);
+    if (machine) {
+      setTargetMachine(machine);
+    } else {
+      const acc = data?.karatAccounts.find((k) => k.karatId === karatId) || data?.karatAccounts[0];
+      setTargetMachine(acc?.suggestedMachine || 'HAND');
+    }
     setQuickTxOpen(true);
   };
 
@@ -233,21 +249,21 @@ export default function CustomerDetailPage({
         {/* Header Action Buttons */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
-            onClick={() => openTx(TransactionType.IN, karatAccounts?.[0]?.karatId)}
+            onClick={() => openTx(TransactionType.IN, karatAccounts?.[0]?.karatId, karatAccounts?.[0]?.suggestedMachine)}
             className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>+ IN</span>
           </button>
           <button
-            onClick={() => openTx(TransactionType.OUT, karatAccounts?.[0]?.karatId)}
+            onClick={() => openTx(TransactionType.OUT, karatAccounts?.[0]?.karatId, karatAccounts?.[0]?.suggestedMachine)}
             className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
           >
             <Minus className="w-4 h-4 stroke-[3]" />
             <span>− OUT</span>
           </button>
           <Link
-            href={`/settlements?customerId=${customer.id}`}
+            href={`/settlements?customerId=${customer.id}${karatAccounts?.[0]?.karatId ? `&karatId=${karatAccounts[0].karatId}` : ''}&machine=${karatAccounts?.[0]?.suggestedMachine || 'HAND'}`}
             className="flex items-center gap-1.5 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
           >
             <Scale className="w-4 h-4" />
@@ -281,6 +297,11 @@ export default function CustomerDetailPage({
           </span>
           <div className="text-2xl font-black text-amber-900 mt-1 font-mono">
             {summary.totalPendingGold} g
+          </div>
+          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 text-[11px] font-mono">
+            <span className="text-slate-600">Hand: <strong className="text-slate-900">{summary.handPendingGold || '0.000'}g</strong></span>
+            <span className="text-slate-300">•</span>
+            <span className="text-purple-700">Big: <strong className="text-purple-900">{summary.bigPendingGold || '0.000'}g</strong></span>
           </div>
         </div>
 
@@ -322,15 +343,28 @@ export default function CustomerDetailPage({
                   </div>
 
                   <div className="mt-4">
-                    <span className="text-xs uppercase font-bold text-slate-400 tracking-wider">
-                      Current Running Balance
-                    </span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs uppercase font-bold text-slate-400 tracking-wider">
+                        Current Running Balance
+                      </span>
+                      {acc.suggestedMachine === 'BIG' && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                          Big Machine Order
+                        </span>
+                      )}
+                    </div>
                     <div
                       className={`text-3xl font-black font-mono tracking-tight ${
                         hasPending ? 'text-amber-900' : 'text-slate-800'
                       }`}
                     >
                       {acc.balance} g
+                    </div>
+                    {/* Machine breakdown for this karat */}
+                    <div className="flex items-center gap-3 mt-1.5 text-xs font-mono">
+                      <span className="text-slate-600">Hand: <strong className="text-slate-900">{acc.handBalance || '0.000'} g</strong></span>
+                      <span className="text-slate-300">•</span>
+                      <span className="text-purple-700">Big: <strong className="text-purple-900">{acc.bigBalance || '0.000'} g</strong></span>
                     </div>
                   </div>
 
@@ -352,20 +386,26 @@ export default function CustomerDetailPage({
                 </div>
 
                 {/* Actions */}
-                <div className="pt-2 flex items-center justify-between border-t border-slate-100">
+                <div className="pt-2 flex items-center justify-between border-t border-slate-100 flex-wrap gap-2">
                   <div className="flex items-center gap-1.5">
                     <button
-                      onClick={() => openTx(TransactionType.IN, acc.karatId)}
+                      onClick={() => openTx(TransactionType.IN, acc.karatId, acc.suggestedMachine)}
                       className="px-2.5 py-1 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold rounded-lg transition"
                     >
                       + IN
                     </button>
                     <button
-                      onClick={() => openTx(TransactionType.OUT, acc.karatId)}
+                      onClick={() => openTx(TransactionType.OUT, acc.karatId, acc.suggestedMachine)}
                       className="px-2.5 py-1 bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200 text-xs font-bold rounded-lg transition"
                     >
                       − OUT
                     </button>
+                    <Link
+                      href={`/settlements?customerId=${customer.id}&karatId=${acc.karatId}&machine=${acc.suggestedMachine || 'HAND'}`}
+                      className="px-2.5 py-1 bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 text-xs font-bold rounded-lg transition flex items-center gap-1"
+                    >
+                      <Scale className="w-3.5 h-3.5" /> Settle
+                    </Link>
                   </div>
 
                   <Link
@@ -490,6 +530,7 @@ export default function CustomerDetailPage({
         initialType={quickTxType}
         initialCustomerId={customer.id}
         initialKaratId={targetKaratId}
+        initialMachine={targetMachine}
       />
 
       {/* Delete Confirmation Modal */}

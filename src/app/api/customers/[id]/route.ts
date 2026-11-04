@@ -42,6 +42,7 @@ export async function GET(
           select: {
             type: true,
             weight: true,
+            machineType: true,
             transactionDate: true,
           },
           orderBy: { transactionDate: 'desc' },
@@ -49,17 +50,38 @@ export async function GET(
 
         let totalIn = new Decimal(0);
         let totalOut = new Decimal(0);
+        let handIn = new Decimal(0);
+        let handOut = new Decimal(0);
+        let bigIn = new Decimal(0);
+        let bigOut = new Decimal(0);
 
         for (const t of txns) {
           const w = toDecimal(t.weight);
+          const isBig = t.machineType === 'BIG';
           if (t.type === TransactionType.IN || t.type === TransactionType.OPENING_BALANCE) {
             totalIn = totalIn.plus(w);
+            if (isBig) bigIn = bigIn.plus(w);
+            else handIn = handIn.plus(w);
           } else if (t.type === TransactionType.OUT) {
             totalOut = totalOut.plus(w);
+            if (isBig) bigOut = bigOut.plus(w);
+            else handOut = handOut.plus(w);
           }
         }
 
         const balance = totalIn.minus(totalOut);
+        const handBalance = handIn.minus(handOut);
+        const bigBalance = bigIn.minus(bigOut);
+
+        // Determine suggested machine for next action / settlement
+        let suggestedMachine: 'HAND' | 'BIG' = 'HAND';
+        if (bigBalance.gt(0) && handBalance.lte(0)) {
+          suggestedMachine = 'BIG';
+        } else if (handBalance.gt(0) && bigBalance.lte(0)) {
+          suggestedMachine = 'HAND';
+        } else if (txns.length > 0) {
+          suggestedMachine = txns[0].machineType === 'BIG' ? 'BIG' : 'HAND';
+        }
 
         return {
           accountId: acc.id,
@@ -71,6 +93,13 @@ export async function GET(
           totalOut: totalOut.toFixed(3),
           totalAdjusted: '0.000',
           balance: balance.toFixed(3),
+          handBalance: handBalance.toFixed(3),
+          bigBalance: bigBalance.toFixed(3),
+          handTotalIn: handIn.toFixed(3),
+          handTotalOut: handOut.toFixed(3),
+          bigTotalIn: bigIn.toFixed(3),
+          bigTotalOut: bigOut.toFixed(3),
+          suggestedMachine,
           lastTransactionDate: txns[0]?.transactionDate || null,
           transactionCount: txns.length,
         };
@@ -79,10 +108,20 @@ export async function GET(
 
     // Compute overall customer pending stats
     let overallPendingGold = new Decimal(0);
+    let handPendingGold = new Decimal(0);
+    let bigPendingGold = new Decimal(0);
     for (const ka of karatAccountsData) {
       const b = toDecimal(ka.balance);
+      const hb = toDecimal(ka.handBalance);
+      const bb = toDecimal(ka.bigBalance);
       if (b.gt(0)) {
         overallPendingGold = overallPendingGold.plus(b);
+      }
+      if (hb.gt(0)) {
+        handPendingGold = handPendingGold.plus(hb);
+      }
+      if (bb.gt(0)) {
+        bigPendingGold = bigPendingGold.plus(bb);
       }
     }
 
@@ -153,6 +192,8 @@ export async function GET(
       summary: {
         totalActiveKaratAccounts: karatAccountsData.length,
         totalPendingGold: overallPendingGold.toFixed(3),
+        handPendingGold: handPendingGold.toFixed(3),
+        bigPendingGold: bigPendingGold.toFixed(3),
         totalOutstandingMaking: overallOutstandingMaking.toFixed(2),
         settlementCount: settlements.length,
       },

@@ -90,6 +90,7 @@ interface LedgerResponse {
     settledCount?: number;
     activeBigBalance?: string;
     activeHandBalance?: string;
+    suggestedMachine?: 'HAND' | 'BIG';
   };
   activeLedger?: LedgerItem[];
   settledLedger?: LedgerItem[];
@@ -210,6 +211,14 @@ export default function CustomerKaratLedgerPage({
 
   const { customer, karat, summary, ledger, activeLedger = [], settlements = [] } = data;
 
+  const targetMachine: 'HAND' | 'BIG' =
+    machineFilter !== 'ALL'
+      ? machineFilter
+      : summary.suggestedMachine ||
+        (summary.activeBigBalance && parseFloat(summary.activeBigBalance) > 0 && (!summary.activeHandBalance || parseFloat(summary.activeHandBalance) <= 0)
+          ? 'BIG'
+          : 'HAND');
+
   const currentDisplayLedger =
     activeTab === 'ACTIVE'
       ? activeLedger
@@ -244,7 +253,7 @@ export default function CustomerKaratLedgerPage({
             <span>− OUT</span>
           </button>
           <Link
-            href={`/settlements?customerId=${customer.id}&karatId=${karat.id}`}
+            href={`/settlements?customerId=${customer.id}&karatId=${karat.id}&machine=${targetMachine}`}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
           >
             <Scale className="w-4 h-4" />
@@ -637,6 +646,7 @@ export default function CustomerKaratLedgerPage({
         initialType={quickTxType}
         initialCustomerId={customer.id}
         initialKaratId={karat.id}
+        initialMachine={targetMachine}
       />
 
       <VoidTransactionModal
