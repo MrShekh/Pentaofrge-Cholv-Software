@@ -3,7 +3,7 @@
 import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, Printer, Pencil, CheckCircle2, Bluetooth, Loader2 } from 'lucide-react';
+import { ArrowLeft, Printer, Pencil, CheckCircle2, Bluetooth, Loader2, MessageCircle } from 'lucide-react';
 import { EditSettlementModal } from '@/components/EditSettlementModal';
 import { printSettlementReceiptDirect } from '@/lib/bluetooth-printer';
 
@@ -223,6 +223,40 @@ export default function SettlementReceiptPage({
         parseFloat(settlement.chargeableWeight || '0')
     ).toFixed(3);
 
+  const handleShareWhatsApp = () => {
+    if (!data) return;
+    const cleanPhone = (settlement.customer?.phone || '').replace(/[^0-9]/g, '');
+    const fullPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+
+    let lines = `*━━━━━━━━━━━━━━━━━━━━━*\n`;
+    lines += `*A.M CHOOL*\n`;
+    lines += `*SETTLEMENT RECEIPT*\n`;
+    lines += `*━━━━━━━━━━━━━━━━━━━━━*\n`;
+    lines += `📄 *Settlement No*: ${settlement.settlementNumber}\n`;
+    lines += `📅 *Date*: ${settleDateStr}\n`;
+    lines += `👤 *Customer*: ${settlement.customer.name}${settlement.customer.shopName ? ` (${settlement.customer.shopName})` : ''}\n`;
+    lines += `🏷️ *Karat*: ${settlement.karat.name}\n`;
+    lines += `⚙️ *Machine*: ${(settlement as any).machineType === 'BIG' ? 'Big Machine (Boro)' : 'Hand Machine'}\n`;
+    lines += `*━━━━━━━━━━━━━━━━━━━━━*\n`;
+    lines += `📥 *Total In*: ${settlement.totalInWeight} g\n`;
+    lines += `📤 *Total Out*: ${settlement.totalOutWeight} g\n`;
+    if (parseFloat(settlement.chargeableWeight || '0') > 0) {
+      lines += `🪙 *Making Charge (Gold)*: ${settlement.chargeableWeight} g\n`;
+    }
+    if (parseFloat(settlement.galaiLoss || '0') > 0) {
+      lines += `🔥 *Galai Loss*: ${settlement.galaiLoss} g\n`;
+    }
+    lines += `*━━━━━━━━━━━━━━━━━━━━━*\n`;
+    lines += `✨ *RETURN TO CUSTOMER*: *${returnGoldStr} g*\n`;
+    lines += `*━━━━━━━━━━━━━━━━━━━━━*\n`;
+    lines += `\n_Thank you! - A.M Chool_`;
+
+    const url = fullPhone
+      ? `https://wa.me/${fullPhone}?text=${encodeURIComponent(lines)}`
+      : `https://wa.me/?text=${encodeURIComponent(lines)}`;
+    window.open(url, '_blank');
+  };
+
   return (
     <div className="space-y-5 max-w-md mx-auto">
       {/* Toast */}
@@ -254,6 +288,15 @@ export default function SettlementReceiptPage({
           >
             <Pencil className="w-3.5 h-3.5 text-amber-700" />
             <span>Edit</span>
+          </button>
+
+          <button
+            onClick={handleShareWhatsApp}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition shadow-xs"
+            title="Share settlement receipt on WhatsApp"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span>WhatsApp</span>
           </button>
 
           <button

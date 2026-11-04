@@ -13,9 +13,11 @@ import {
   Calendar,
   AlertTriangle,
   Layers,
+  Printer,
 } from 'lucide-react';
 import { QuickTransactionModal } from '@/components/QuickTransactionModal';
 import { VoidTransactionModal } from '@/components/VoidTransactionModal';
+import { OutReceiptModal, OutReceiptData } from '@/components/OutReceiptModal';
 import { TransactionType } from '@prisma/client';
 
 interface TxItem {
@@ -25,6 +27,7 @@ interface TxItem {
   customerId: string;
   customerName: string;
   shopName: string | null;
+  customerPhone?: string;
   karatId: string;
   karatName: string;
   type: string;
@@ -81,6 +84,25 @@ function TransactionsContent() {
     customerName?: string;
     karatName?: string;
   } | null>(null);
+
+  // Out Receipt Modal
+  const [outReceiptOpen, setOutReceiptOpen] = useState(false);
+  const [selectedOutReceipt, setSelectedOutReceipt] = useState<OutReceiptData | null>(null);
+
+  const handleOpenOutReceipt = (t: TxItem) => {
+    setSelectedOutReceipt({
+      transactionNumber: t.transactionNumber,
+      customerName: t.customerName,
+      shopName: t.shopName,
+      phone: t.customerPhone,
+      karatName: t.karatName,
+      machineType: t.machineType || 'HAND',
+      weight: t.weight,
+      date: t.transactionDate,
+      notes: t.notes,
+    });
+    setOutReceiptOpen(true);
+  };
 
   const fetchTxns = () => {
     setIsLoading(true);
@@ -385,15 +407,26 @@ function TransactionsContent() {
                         {t.createdBy.name}
                       </td>
                       <td className="py-3 px-3 text-center whitespace-nowrap">
-                        {!isVoid && (
-                          <button
-                            onClick={() => handleOpenVoid(t)}
-                            className="p-1 text-slate-400 hover:text-red-600 rounded hover:bg-red-50"
-                            title="Void transaction"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <div className="flex items-center justify-center gap-1">
+                          {isOut && !isVoid && (
+                            <button
+                              onClick={() => handleOpenOutReceipt(t)}
+                              className="p-1 text-slate-400 hover:text-blue-600 rounded hover:bg-blue-50 transition"
+                              title="View & Print OUT Slip"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {!isVoid && (
+                            <button
+                              onClick={() => handleOpenVoid(t)}
+                              className="p-1 text-slate-400 hover:text-red-600 rounded hover:bg-red-50 transition"
+                              title="Void transaction"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -422,6 +455,15 @@ function TransactionsContent() {
         onClose={() => setVoidModalOpen(false)}
         onSuccess={() => fetchTxns()}
         transaction={txToVoid}
+      />
+
+      <OutReceiptModal
+        isOpen={outReceiptOpen}
+        onClose={() => {
+          setOutReceiptOpen(false);
+          setSelectedOutReceipt(null);
+        }}
+        data={selectedOutReceipt}
       />
     </div>
   );

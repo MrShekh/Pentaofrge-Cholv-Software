@@ -72,6 +72,7 @@ export async function GET(req: NextRequest) {
         customerId: t.customerId,
         customerName: t.customer.name,
         shopName: t.customer.shopName,
+        customerPhone: t.customer.phone,
         karatId: t.karatId,
         karatName: t.karat.name,
         type: t.type,

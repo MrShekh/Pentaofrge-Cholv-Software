@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { Printer, X, CheckCircle2, Bluetooth, Loader2 } from 'lucide-react';
+import { Printer, X, CheckCircle2, Bluetooth, Loader2, MessageCircle } from 'lucide-react';
 import { printOutReceiptDirect } from '@/lib/bluetooth-printer';
 
 export interface OutReceiptData {
@@ -10,13 +10,49 @@ export interface OutReceiptData {
   customerName: string;
   shopName?: string | null;
   phone?: string;
-  karatName: string;
+  karatName?: string;
   machineType?: 'HAND' | 'BIG';
   weight: string;
   date: string | Date;
   notes?: string | null;
   previousBalance?: string;
   newBalance?: string;
+}
+
+export function generateOutSlipWhatsAppText(data: OutReceiptData): string {
+  const formattedDate = new Date(data.date).toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  let lines = `*━━━━━━━━━━━━━━━━━━━━━*\n`;
+  lines += `*A.M CHOOL*\n`;
+  lines += `*CUTTING & DELIVERY SLIP (OUT)*\n`;
+  lines += `*━━━━━━━━━━━━━━━━━━━━━*\n`;
+  lines += `📄 *Slip No*: ${data.transactionNumber}\n`;
+  lines += `📅 *Date & Time*: ${formattedDate}\n`;
+  lines += `👤 *Customer*: ${data.customerName}${data.shopName ? ` (${data.shopName})` : ''}\n`;
+  lines += `⚙️ *Machine*: ${data.machineType === 'BIG' ? 'Big Machine (Boro)' : 'Hand Machine'}\n`;
+  if (data.karatName) {
+    lines += `🏷️ *Karat*: ${data.karatName}\n`;
+  }
+  lines += `*━━━━━━━━━━━━━━━━━━━━━*\n`;
+  lines += `📦 *DELIVERED (OUT)*: *${data.weight} g*\n`;
+  if (data.notes) {
+    lines += `📝 *Order / Remark*: ${data.notes}\n`;
+  }
+  lines += `*━━━━━━━━━━━━━━━━━━━━━*\n`;
+  if (data.previousBalance !== undefined) {
+    lines += `• *Previous Balance*: ${data.previousBalance} g\n`;
+  }
+  if (data.newBalance !== undefined) {
+    lines += `• *Current Remaining Balance*: *${data.newBalance} g*\n`;
+  }
+  lines += `\n_Thank you! - A.M Chool_`;
+  return lines;
 }
 
 interface OutReceiptModalProps {
@@ -33,6 +69,16 @@ export function OutReceiptModal({ isOpen, onClose, data }: OutReceiptModalProps)
 
   const handleStandardPrint = () => {
     window.print();
+  };
+
+  const handleShareWhatsApp = () => {
+    const text = generateOutSlipWhatsAppText(data);
+    const cleanPhone = (data.phone || '').replace(/[^0-9]/g, '');
+    const fullPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+    const url = fullPhone
+      ? `https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
   };
 
   const handleBluetoothPrint = async () => {
@@ -76,7 +122,7 @@ export function OutReceiptModal({ isOpen, onClose, data }: OutReceiptModalProps)
         <div className="flex items-center justify-between px-4 py-3 bg-slate-900 text-white no-print">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span className="text-xs font-bold uppercase tracking-wider">Out Entry Recorded</span>
+            <span className="text-xs font-bold uppercase tracking-wider">Out Entry Slip</span>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -91,6 +137,14 @@ export function OutReceiptModal({ isOpen, onClose, data }: OutReceiptModalProps)
                 <Bluetooth className="w-3.5 h-3.5" />
               )}
               <span>{isBluetoothPrinting ? 'Printing...' : 'Direct BT Print'}</span>
+            </button>
+            <button
+              onClick={handleShareWhatsApp}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-xs transition"
+              title="Share delivery slip on WhatsApp"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>WhatsApp</span>
             </button>
             <button
               onClick={handleStandardPrint}
@@ -215,6 +269,14 @@ export function OutReceiptModal({ isOpen, onClose, data }: OutReceiptModalProps)
               <Bluetooth className="w-3.5 h-3.5" />
             )}
             <span>{isBluetoothPrinting ? 'Printing to POSIFLOW...' : 'Bluetooth Direct Print'}</span>
+          </button>
+          <button
+            onClick={handleShareWhatsApp}
+            className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-xs"
+            title="Share slip on WhatsApp"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span>WhatsApp</span>
           </button>
           <button
             onClick={handleStandardPrint}

@@ -19,6 +19,7 @@ import {
 import { QuickTransactionModal } from '@/components/QuickTransactionModal';
 import { VoidTransactionModal } from '@/components/VoidTransactionModal';
 import { EditSettlementModal, SettlementEditData } from '@/components/EditSettlementModal';
+import { OutReceiptModal, OutReceiptData } from '@/components/OutReceiptModal';
 import { TransactionType } from '@prisma/client';
 
 interface LedgerItem {
@@ -129,6 +130,26 @@ export default function CustomerKaratLedgerPage({
   // Edit Settlement Modal
   const [editSettlementModalOpen, setEditSettlementModalOpen] = useState(false);
   const [settlementToEdit, setSettlementToEdit] = useState<SettlementEditData | null>(null);
+
+  // Out Receipt Modal
+  const [outReceiptOpen, setOutReceiptOpen] = useState(false);
+  const [selectedOutReceipt, setSelectedOutReceipt] = useState<OutReceiptData | null>(null);
+
+  const handleOpenOutReceipt = (t: LedgerItem) => {
+    setSelectedOutReceipt({
+      transactionNumber: t.transactionNumber,
+      customerName: data?.customer?.name || '',
+      shopName: data?.customer?.shopName,
+      phone: data?.customer?.phone,
+      karatName: data?.karat?.name || '',
+      machineType: t.machineType || 'HAND',
+      weight: t.outWeight || t.weight,
+      date: t.date,
+      notes: t.notes || t.description,
+      newBalance: t.runningBalance !== null ? `${t.runningBalance}` : undefined,
+    });
+    setOutReceiptOpen(true);
+  };
 
   const handleOpenEditSettlement = (s: SettlementHistoryItem) => {
     setSettlementToEdit({
@@ -620,15 +641,26 @@ export default function CustomerKaratLedgerPage({
 
                       {/* Actions */}
                       <td className="py-3 px-3 text-center">
-                        {!isVoid && !t.settlementId && (
-                          <button
-                            onClick={() => handleOpenVoid(t)}
-                            title="Void Transaction"
-                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <div className="flex items-center justify-center gap-1">
+                          {t.type === 'OUT' && !isVoid && (
+                            <button
+                              onClick={() => handleOpenOutReceipt(t)}
+                              title="View & Print OUT Slip"
+                              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {!isVoid && !t.settlementId && (
+                            <button
+                              onClick={() => handleOpenVoid(t)}
+                              title="Void Transaction"
+                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -675,6 +707,15 @@ export default function CustomerKaratLedgerPage({
           setTimeout(() => setToastMessage(null), 4000);
           fetchLedger();
         }}
+      />
+
+      <OutReceiptModal
+        isOpen={outReceiptOpen}
+        onClose={() => {
+          setOutReceiptOpen(false);
+          setSelectedOutReceipt(null);
+        }}
+        data={selectedOutReceipt}
       />
     </div>
   );
